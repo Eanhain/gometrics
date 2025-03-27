@@ -9,10 +9,15 @@ on:
 jobs:
   statictest:
     runs-on: ubuntu-latest
-    container: golang:1.22
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Set up Go 1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
 
       - name: Download statictest binary
         uses: robinraju/release-downloader@v1.8
@@ -23,11 +28,11 @@ jobs:
           out-file-path: .tools
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup autotest binary
+      - name: Setup statictest binary
         run: |
-          chmod -R +x $GITHUB_WORKSPACE/.tools/statictest
-          mv $GITHUB_WORKSPACE/.tools/statictest /usr/local/bin/statictest
+          chmod +x $GITHUB_WORKSPACE/.tools/statictest
+          sudo mv $GITHUB_WORKSPACE/.tools/statictest /usr/local/bin/statictest
 
-      - name: Run statictest
+      - name: Run statictest via go vet
         run: |
           go vet -vettool=$(which statictest) ./...
