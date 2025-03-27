@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,22 +23,22 @@ func counterParse(res http.ResponseWriter, key string, value float64) {
 	res.WriteHeader(http.StatusOK)
 }
 
-func printHttpFuncDebug(res http.ResponseWriter) {
-	body := "Header ===============\r\n"
-	for k, v := range res.Header() {
-		body += fmt.Sprintf("%s: %v\r\n", k, v)
-	}
+// func printHttpFuncDebug(res http.ResponseWriter) {
+// 	body := "Header ===============\r\n"
+// 	for k, v := range res.Header() {
+// 		body += fmt.Sprintf("%s: %v\r\n", k, v)
+// 	}
 
-	body += fmt.Sprintf("%+v\r\n", "storageMetrics.gauge")
-	for k, v := range storageMetrics.gauge {
-		body += fmt.Sprintf("%+v: %+v\r\n", k, v)
-	}
-	body += fmt.Sprintf("%+v\r\n", "storageMetrics.counter")
-	for k, v := range storageMetrics.counter {
-		body += fmt.Sprintf("%+v: %+v\r\n", k, v)
-	}
-	res.Write([]byte(body))
-}
+// 	body += fmt.Sprintf("%+v\r\n", "storageMetrics.gauge")
+// 	for k, v := range storageMetrics.gauge {
+// 		body += fmt.Sprintf("%+v: %+v\r\n", k, v)
+// 	}
+// 	body += fmt.Sprintf("%+v\r\n", "storageMetrics.counter")
+// 	for k, v := range storageMetrics.counter {
+// 		body += fmt.Sprintf("%+v: %+v\r\n", k, v)
+// 	}
+// 	res.Write([]byte(body))
+// }
 
 func updateMetrics(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodPost {
