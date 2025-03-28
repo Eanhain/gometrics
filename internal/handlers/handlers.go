@@ -34,7 +34,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 		action := path[0]
 		if len(path) != 4 {
 			res.WriteHeader(http.StatusNotFound)
-		} else if action != "/update/" {
+		} else if action != "update" {
 			res.WriteHeader(http.StatusBadRequest)
 		} else {
 			typeMetric := path[1]
