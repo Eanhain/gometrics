@@ -10,25 +10,25 @@ type handlerService struct {
 }
 
 type repositories interface {
-	gaugeInsert(key string, value string) error
-	counterInsert(key string, value string) error
+	GaugeInsert(key string, value string) int
+	CounterInsert(key string, value string) int
 }
 
-func newHandlerService(storage repositories) *handlerService {
+func NewHandlerService(storage repositories) *handlerService {
 	return &handlerService{
 		storage: storage,
 	}
 }
 
-func (h *handlerService) createHandler(funcType string) error {
+func (h *handlerService) CreateHandler(funcType string) error {
 	switch funcType {
 	case "/update/":
-		http.HandleFunc(funcType, h.updateMetrics)
+		http.HandleFunc(funcType, h.UpdateMetrics)
 	}
 	return nil
 }
 
-func (h *handlerService) updateMetrics(res http.ResponseWriter, req *http.Request) {
+func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodPost {
 		path := strings.Split(req.URL.Path, "/")[1:]
 		action := path[0]
@@ -42,9 +42,9 @@ func (h *handlerService) updateMetrics(res http.ResponseWriter, req *http.Reques
 			valueMetric := path[3]
 			switch typeMetric {
 			case "gauge":
-				h.storage.gaugeInsert(nameMetric, valueMetric)
+				h.storage.GaugeInsert(nameMetric, valueMetric)
 			case "counter":
-				h.storage.counterInsert(nameMetric, valueMetric)
+				h.storage.CounterInsert(nameMetric, valueMetric)
 			default:
 				res.WriteHeader(http.StatusBadRequest)
 			}

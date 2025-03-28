@@ -19,13 +19,13 @@ type server struct {
 // 	updateMetrics(res http.ResponseWriter, req http.Request) error
 // }
 
-func createServer(port string, handler http.Handler) *server {
+func CreateServer(port string, handler http.Handler) *server {
 	return &server{
 		port:    port,
 		handler: handler,
 	}
 }
 
-func (h *server) initalServer() error {
+func (h *server) InitalServer() error {
 	return http.ListenAndServe(h.port, h.handler)
 }

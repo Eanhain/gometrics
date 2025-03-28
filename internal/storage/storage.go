@@ -10,14 +10,14 @@ type memStorage struct {
 	counter map[string]float64
 }
 
-func newMemStorage() *memStorage {
+func NewMemStorage() *memStorage {
 	return &memStorage{
 		gauge:   make(map[string]int),
 		counter: make(map[string]float64),
 	}
 }
 
-func (storage *memStorage) gaugeInsert(key string, rawValue string) int {
+func (storage *memStorage) GaugeInsert(key string, rawValue string) int {
 	value, err := strconv.Atoi(rawValue)
 	if err != nil {
 		return http.StatusBadRequest
@@ -28,7 +28,7 @@ func (storage *memStorage) gaugeInsert(key string, rawValue string) int {
 
 }
 
-func (storage *memStorage) counterInsert(key string, rawValue string) int {
+func (storage *memStorage) CounterInsert(key string, rawValue string) int {
 	value, err := strconv.ParseFloat(rawValue, 64)
 	if err != nil {
 		return http.StatusBadRequest
