@@ -42,9 +42,9 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 			valueMetric := path[3]
 			switch typeMetric {
 			case "gauge":
-				h.storage.GaugeInsert(nameMetric, valueMetric)
+				res.WriteHeader(h.storage.GaugeInsert(nameMetric, valueMetric))
 			case "counter":
-				h.storage.CounterInsert(nameMetric, valueMetric)
+				res.WriteHeader(h.storage.CounterInsert(nameMetric, valueMetric))
 			default:
 				res.WriteHeader(http.StatusBadRequest)
 			}
