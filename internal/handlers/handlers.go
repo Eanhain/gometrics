@@ -15,6 +15,7 @@ type repositories interface {
 }
 
 func NewHandlerService(storage repositories) *handlerService {
+
 	return &handlerService{
 		storage: storage,
 	}
