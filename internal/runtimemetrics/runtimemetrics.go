@@ -1,4 +1,4 @@
-package runtimegen
+package runtimemetrics
 
 import (
 	"fmt"
