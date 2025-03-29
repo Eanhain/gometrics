@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -41,7 +40,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 			typeMetric := path[1]
 			nameMetric := path[2]
 			valueMetric := path[3]
-			fmt.Printf("Инсертим %s: %s = %s \n", typeMetric, nameMetric, valueMetric)
+			// fmt.Printf("Инсертим %s: %s = %s \n", typeMetric, nameMetric, valueMetric)
 			switch typeMetric {
 			case "gauge":
 				res.WriteHeader(h.storage.GaugeInsert(nameMetric, valueMetric))
