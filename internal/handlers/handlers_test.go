@@ -63,6 +63,14 @@ func Test_handlerService_UpdateMetrics(t *testing.T) {
 			value:  0,
 			url:    "/update/gauge/cpu/15/16/17",
 		},
+		{
+			name:   "ok insert 0",
+			h:      NewHandlerService(storage.NewMemStorage()),
+			status: 200,
+			key:    "cpu",
+			value:  0,
+			url:    "/update/gauge/cpu/0",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
