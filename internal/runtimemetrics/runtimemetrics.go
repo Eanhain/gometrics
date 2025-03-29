@@ -54,17 +54,18 @@ func (ru *runtimeUpdate) ConvertToString(rawValue reflect.Value) string {
 func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 	runtime.ReadMemStats(&ru.memMetrics)
 	v := reflect.ValueOf(ru.memMetrics)
-
 	for _, metricName := range metrics {
 		metricValue := v.FieldByName(metricName)
+		ValueNotFound := fmt.Errorf("по переданному ключу %v не найдено значения", metricName)
+		TypeError := fmt.Errorf("неверный тип данных %s: %s", metricName, metricValue.Kind())
 		if !metricValue.IsValid() {
-			fmt.Printf("Поле %s не найдено \n", metricName)
+			return ValueNotFound
 		} else {
 			metricStringValue := ru.ConvertToString(metricValue)
 			if metricStringValue != "error" {
 				ru.storage.GaugeInsert(metricName, metricStringValue)
 			} else {
-				fmt.Printf("Неверный тип данных %s: %v \n", metricName, metricValue.Type())
+				return TypeError
 			}
 		}
 	}

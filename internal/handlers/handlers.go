@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -12,6 +13,8 @@ type handlerService struct {
 type repositories interface {
 	GaugeInsert(key string, value string) int
 	CounterInsert(key string, value string) int
+	GetGauge(key string) float64
+	GetCounter(key string) int
 }
 
 func NewHandlerService(storage repositories) *handlerService {
@@ -33,15 +36,17 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 	if req.Method == http.MethodPost {
 		path := strings.Split(req.URL.Path, "/")[1:]
 		action := path[0]
-		if len(path) != 4 {
+		if len(path) < 4 || path[len(path)-1] == "" {
 			res.WriteHeader(http.StatusNotFound)
+		} else if len(path) > 4 {
+			res.WriteHeader(http.StatusBadRequest)
 		} else if action != "update" {
 			res.WriteHeader(http.StatusBadRequest)
 		} else {
 			typeMetric := path[1]
 			nameMetric := path[2]
 			valueMetric := path[3]
-			// fmt.Printf("Инсертим %s: %s = %s \n", typeMetric, nameMetric, valueMetric)
+			fmt.Printf("Инсертим %s: %s = %s \n", typeMetric, nameMetric, valueMetric)
 			switch typeMetric {
 			case "gauge":
 				res.WriteHeader(h.storage.GaugeInsert(nameMetric, valueMetric))
@@ -51,5 +56,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 				res.WriteHeader(http.StatusBadRequest)
 			}
 		}
+	} else {
+		res.WriteHeader(http.StatusBadRequest)
 	}
 }

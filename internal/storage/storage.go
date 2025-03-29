@@ -6,27 +6,27 @@ import (
 	"strconv"
 )
 
-type memStorage struct {
+type MemStorage struct {
 	gauge   map[string]float64
 	counter map[string]int
 }
 
-func NewMemStorage() *memStorage {
-	return &memStorage{
+func NewMemStorage() *MemStorage {
+	return &MemStorage{
 		gauge:   make(map[string]float64),
 		counter: make(map[string]int),
 	}
 }
 
-func (storage *memStorage) getGauge(key string) float64 {
+func (storage *MemStorage) GetGauge(key string) float64 {
 	return storage.gauge[key]
 }
 
-func (storage *memStorage) getCounter(key string) int {
+func (storage *MemStorage) GetCounter(key string) int {
 	return storage.counter[key]
 }
 
-func (storage *memStorage) GetUpdateUrls(host string, port string) []string {
+func (storage *MemStorage) GetUpdateUrls(host string, port string) []string {
 	allUrls := []string{}
 	for key, value := range storage.gauge {
 		url := fmt.Sprintf("http://%s%s/update/gauge/%s/%v", host, port, key, value)
@@ -39,7 +39,7 @@ func (storage *memStorage) GetUpdateUrls(host string, port string) []string {
 	return allUrls
 }
 
-func (storage *memStorage) GaugeInsert(key string, rawValue string) int {
+func (storage *MemStorage) GaugeInsert(key string, rawValue string) int {
 	value, err := strconv.ParseFloat(rawValue, 64)
 	if err != nil {
 		return http.StatusBadRequest
@@ -50,7 +50,7 @@ func (storage *memStorage) GaugeInsert(key string, rawValue string) int {
 
 }
 
-func (storage *memStorage) CounterInsert(key string, rawValue string) int {
+func (storage *MemStorage) CounterInsert(key string, rawValue string) int {
 	value, err := strconv.Atoi(rawValue)
 	if err != nil {
 		return http.StatusBadRequest
