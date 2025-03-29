@@ -58,13 +58,13 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 	for _, metricName := range metrics {
 		metricValue := v.FieldByName(metricName)
 		if !metricValue.IsValid() {
-			// fmt.Printf("Поле %s не найдено \n", metricName)
+			fmt.Printf("Поле %s не найдено \n", metricName)
 		} else {
 			metricStringValue := ru.ConvertToString(metricValue)
 			if metricStringValue != "error" {
 				ru.storage.GaugeInsert(metricName, metricStringValue)
 			} else {
-				// fmt.Printf("Неверный тип данных %s: %v \n", metricName, metricValue.Type())
+				fmt.Printf("Неверный тип данных %s: %v \n", metricName, metricValue.Type())
 			}
 		}
 	}
