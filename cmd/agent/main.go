@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gometrics/internal/runtimeGen"
+	"gometrics/internal/runtimegen"
 	"gometrics/internal/storage"
 	"sync"
 )
@@ -37,7 +37,7 @@ func main() {
 		"TotalAlloc",
 	}
 	newStorage := storage.NewMemStorage()
-	metricsGen := runtimeGen.NewRuntimeUpdater(newStorage)
+	metricsGen := runtimegen.NewRuntimeUpdater(newStorage)
 	var wg sync.WaitGroup
 	wg.Add(2)
 

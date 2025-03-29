@@ -1,4 +1,4 @@
-package runtimeGen
+package runtimegen
 
 import (
 	"fmt"
@@ -75,7 +75,8 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
 	for {
 		urls := ru.storage.GetUpdateUrls(host, port)
 		for _, url := range urls {
-			http.Post(url, "text/plain", nil)
+			resp, _ := http.Post(url, "text/plain", nil)
+			defer resp.Body.Close()
 		}
 		time.Sleep(sendTimeDuration * time.Second)
 	}
