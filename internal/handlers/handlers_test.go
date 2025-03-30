@@ -18,7 +18,6 @@ func testRequest(t *testing.T, ts *httptest.Server, method,
 
 	resp, err := ts.Client().Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -107,6 +106,7 @@ func Test_handlerService_CreateHandlers(t *testing.T) {
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
 			resp, _ := testRequest(t, ts, tt.method, tt.url)
+			defer resp.Body.Close()
 			assert.Equal(t, tt.status, resp.StatusCode)
 		})
 	}

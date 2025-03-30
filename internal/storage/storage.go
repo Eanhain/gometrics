@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var ErrNotFound = errors.New("Resource was not found")
+var ErrNotFound = errors.New("resource was not found")
 
 type MemStorage struct {
 	gauge   map[string]float64
