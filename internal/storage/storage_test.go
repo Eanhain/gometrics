@@ -80,7 +80,8 @@ func Test_memStorage_CounterInsert(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "appendToMemStorage" {
 				tt.storage.CounterInsert(tt.args.key, tt.args.rawValue)
-				assert.Equal(t, tt.storage.GetCounter("cpu"), tt.want)
+				result, _ := tt.storage.GetCounter("cpu")
+				assert.Equal(t, result, tt.want)
 			} else if got := tt.storage.CounterInsert(tt.args.key, tt.args.rawValue); got != tt.want {
 				t.Errorf("memStorage.CounterInsert() = %v, want %v", got, tt.want)
 			}

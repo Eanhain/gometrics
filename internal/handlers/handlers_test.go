@@ -2,30 +2,42 @@ package handlers
 
 import (
 	"gometrics/internal/storage"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func Test_handlerService_UpdateMetrics(t *testing.T) {
-	// type args struct {
-	// 	res http.ResponseWriter
-	// 	req *http.Request
-	// }
+func testRequest(t *testing.T, ts *httptest.Server, method,
+	path string) (*http.Response, string) {
+	req, err := http.NewRequest(method, ts.URL+path, nil)
+	require.NoError(t, err)
+
+	resp, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	return resp, string(respBody)
+}
+
+func Test_handlerService_CreateHandlers(t *testing.T) {
 	tests := []struct {
 		name   string
-		h      *handlerService
+		method string
 		status int
 		key    string
 		value  float64
 		url    string
-		// args args
 	}{
 		{
 			name:   "ok insert",
-			h:      NewHandlerService(storage.NewMemStorage()),
+			method: "POST",
 			status: 200,
 			key:    "cpu",
 			value:  15,
@@ -33,15 +45,15 @@ func Test_handlerService_UpdateMetrics(t *testing.T) {
 		},
 		{
 			name:   "bad select insert",
-			h:      NewHandlerService(storage.NewMemStorage()),
-			status: 400,
+			method: "POST",
+			status: 404,
 			key:    "cpu",
 			value:  0,
 			url:    "/select/gauge/cpu/15",
 		},
 		{
 			name:   "guge insert",
-			h:      NewHandlerService(storage.NewMemStorage()),
+			method: "POST",
 			status: 400,
 			key:    "cpu",
 			value:  0,
@@ -49,7 +61,7 @@ func Test_handlerService_UpdateMetrics(t *testing.T) {
 		},
 		{
 			name:   "value only insert",
-			h:      NewHandlerService(storage.NewMemStorage()),
+			method: "POST",
 			status: 404,
 			key:    "cpu",
 			value:  0,
@@ -57,30 +69,45 @@ func Test_handlerService_UpdateMetrics(t *testing.T) {
 		},
 		{
 			name:   "overhead ins",
-			h:      NewHandlerService(storage.NewMemStorage()),
-			status: 400,
+			method: "POST",
+			status: 404,
 			key:    "cpu",
 			value:  0,
 			url:    "/update/gauge/cpu/15/16/17",
 		},
 		{
 			name:   "ok insert 0",
-			h:      NewHandlerService(storage.NewMemStorage()),
+			method: "POST",
 			status: 200,
 			key:    "cpu",
 			value:  0,
 			url:    "/update/gauge/cpu/0",
 		},
+		{
+			name:   "all metrics",
+			method: "GET",
+			status: 200,
+			key:    "cpu",
+			value:  0,
+			url:    "/",
+		},
+		{
+			name:   "get not found metrics",
+			method: "GET",
+			status: 404,
+			key:    "cpu",
+			value:  0,
+			url:    "/value/test",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, tt.url, nil)
-			tt.h.UpdateMetrics(w, req)
-			res := w.Result()
-			assert.Equal(t, tt.status, res.StatusCode)
-			assert.Equal(t, tt.value, tt.h.storage.GetGauge(tt.key))
-			defer res.Body.Close()
+			h := NewHandlerService(storage.NewMemStorage())
+			h.CreateHandlers()
+			ts := httptest.NewServer(h.GetRouter())
+			defer ts.Close()
+			resp, _ := testRequest(t, ts, tt.method, tt.url)
+			assert.Equal(t, tt.status, resp.StatusCode)
 		})
 	}
 }

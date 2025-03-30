@@ -3,60 +3,100 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type handlerService struct {
 	storage repositories
+	router  *chi.Mux
 }
 
 type repositories interface {
 	GaugeInsert(key string, value string) int
 	CounterInsert(key string, value string) int
-	GetGauge(key string) float64
-	GetCounter(key string) int
+	GetGauge(key string) (float64, error)
+	GetCounter(key string) (int, error)
+	GetAllMetrics() map[string]string
 }
 
 func NewHandlerService(storage repositories) *handlerService {
-
 	return &handlerService{
 		storage: storage,
+		router:  chi.NewRouter(),
 	}
 }
 
-func (h *handlerService) CreateHandler(funcType string) error {
-	switch funcType {
-	case "/update/":
-		http.HandleFunc(funcType, h.UpdateMetrics)
+func (h *handlerService) GetRouter() *chi.Mux {
+	return h.router
+}
+
+func (h *handlerService) routeUpdateFunc(r chi.Router) {
+	r.Post("/{type}/{name}/{value}", h.UpdateMetrics)
+}
+
+func (h *handlerService) routeValueFunc(r chi.Router) {
+	r.Get("/{type}/{name}", h.GetMetrics)
+}
+
+func (h *handlerService) routeRootFunc(r chi.Router) {
+	r.Get("/", h.showAllMetrics)
+}
+
+func (h *handlerService) CreateHandlers() {
+	h.router.Route("/", h.routeRootFunc)
+	h.router.Route("/update/", h.routeUpdateFunc)
+	h.router.Route("/value/", h.routeValueFunc)
+}
+
+func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
+	metrics := h.storage.GetAllMetrics()
+	res.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// fmt.Fprintf(res, "<ul>")
+	format := "%s: %s<br>"
+	for key, value := range metrics {
+		fmt.Fprintf(res, format, key, value)
 	}
-	return nil
+	// fmt.Fprintf(res, "</ul>")
+}
+
+func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) {
+	typeMetric := chi.URLParam(req, "type")
+	nameMetric := chi.URLParam(req, "name")
+	format := "%v"
+	switch typeMetric {
+	case "gauge":
+		value, err := h.storage.GetGauge(nameMetric)
+		if err != nil {
+			res.WriteHeader(http.StatusNotFound)
+		} else {
+			fmt.Fprintf(res, format, value)
+		}
+	case "counter":
+		value, err := h.storage.GetCounter(nameMetric)
+		if err != nil {
+			res.WriteHeader(http.StatusNotFound)
+		} else {
+			fmt.Fprintf(res, format, value)
+		}
+	default:
+		res.WriteHeader(http.StatusBadRequest)
+	}
 }
 
 func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodPost {
-		path := strings.Split(req.URL.Path, "/")[1:]
-		action := path[0]
-		if len(path) < 4 || path[len(path)-1] == "" {
-			res.WriteHeader(http.StatusNotFound)
-		} else if len(path) > 4 {
-			res.WriteHeader(http.StatusBadRequest)
-		} else if action != "update" {
-			res.WriteHeader(http.StatusBadRequest)
-		} else {
-			typeMetric := path[1]
-			nameMetric := path[2]
-			valueMetric := path[3]
-			fmt.Printf("Инсертим %s: %s = %s \n", typeMetric, nameMetric, valueMetric)
-			switch typeMetric {
-			case "gauge":
-				res.WriteHeader(h.storage.GaugeInsert(nameMetric, valueMetric))
-			case "counter":
-				res.WriteHeader(h.storage.CounterInsert(nameMetric, valueMetric))
-			default:
-				res.WriteHeader(http.StatusBadRequest)
-			}
-		}
-	} else {
+	typeMetric := chi.URLParam(req, "type")
+	nameMetric := chi.URLParam(req, "name")
+	valueMetric := chi.URLParam(req, "value")
+	// fmt.Printf("Инсертим %s: %s = %s \n", typeMetric, nameMetric, valueMetric)
+	switch typeMetric {
+	case "gauge":
+		res.WriteHeader(h.storage.GaugeInsert(nameMetric, valueMetric))
+	case "counter":
+		res.WriteHeader(h.storage.CounterInsert(nameMetric, valueMetric))
+	default:
 		res.WriteHeader(http.StatusBadRequest)
+
 	}
+
 }

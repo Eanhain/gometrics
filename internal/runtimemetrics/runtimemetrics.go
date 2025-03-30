@@ -3,28 +3,34 @@ package runtimemetrics
 import (
 	"fmt"
 	"math/rand/v2"
-	"net/http"
 	"reflect"
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/go-resty/resty/v2"
 )
 
 type runtimeUpdate struct {
 	storage    repositories
 	memMetrics runtime.MemStats
+	client     *resty.Client
 }
 
 type repositories interface {
 	GaugeInsert(key string, value string) int
 	CounterInsert(key string, rawValue string) int
 	GetUpdateUrls(host string, port string) []string
+	GetGauge(key string) (float64, error)
+	GetCounter(key string) (int, error)
+	GetAllMetrics() map[string]string
 }
 
 func NewRuntimeUpdater(storage repositories) *runtimeUpdate {
 	return &runtimeUpdate{
 		storage:    storage,
 		memMetrics: runtime.MemStats{},
+		client:     resty.New(),
 	}
 }
 
@@ -77,8 +83,12 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
 	for {
 		urls := ru.storage.GetUpdateUrls(host, port)
 		for _, url := range urls {
-			resp, _ := http.Post(url, "text/plain", nil)
-			resp.Body.Close()
+			_, err := ru.client.R().
+				SetHeader("Content-Type", "text/plain").
+				Post(url)
+			if err != nil {
+				panic(err)
+			}
 		}
 		time.Sleep(sendTimeDuration * time.Second)
 	}
