@@ -83,12 +83,12 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
 	for {
 		urls := ru.storage.GetUpdateUrls(host, port)
 		for _, url := range urls {
-			ru.client.R().
+			_, err := ru.client.R().
 				SetHeader("Content-Type", "text/plain").
 				Post(url)
-			// if err != nil {
-			// 	panic(err)
-			// }
+			if err != nil {
+				panic(err)
+			}
 		}
 		time.Sleep(sendTimeDuration * time.Second)
 	}
