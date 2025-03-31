@@ -87,7 +87,8 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
 				SetHeader("Content-Type", "text/plain").
 				Post(url)
 			if err != nil {
-				panic(err)
+				fmt.Printf("Не получилось отправить метрику %v\n", url)
+				continue
 			}
 		}
 		time.Sleep(sendTimeDuration * time.Second)
