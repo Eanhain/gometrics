@@ -76,7 +76,7 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		metricsGen.SendMetrics(addr[0], addr[1], inter.ReportInterval)
+		metricsGen.SendMetrics(addr[0], ":"+addr[1], inter.ReportInterval)
 	}()
 
 	wg.Wait()
