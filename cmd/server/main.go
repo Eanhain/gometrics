@@ -9,11 +9,6 @@ import (
 
 var server = true
 
-type flagCustom interface {
-	InitialFlags()
-	ParseFlags(server bool)
-}
-
 func main() {
 	newStorage := storage.NewMemStorage()
 	newHandler := handlers.NewHandlerService(newStorage)
