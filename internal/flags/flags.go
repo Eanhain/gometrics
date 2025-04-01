@@ -29,6 +29,9 @@ func (a *addr) String() string {
 
 func (a *addr) Set(flagValue string) error {
 	args := strings.Split(flagValue, ":")
+	if len(args) != 2 {
+		panic(ErrNotCorrect)
+	}
 	a.host = args[0]
 	a.port, err = strconv.Atoi(args[1])
 	if err != nil {
