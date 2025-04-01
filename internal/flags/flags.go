@@ -27,10 +27,10 @@ func (a *addr) String() string {
 	return fmt.Sprintf("%s:%v", a.host, a.port)
 }
 
-func (o *addr) Set(flagValue string) error {
+func (a *addr) Set(flagValue string) error {
 	args := strings.Split(flagValue, ":")
-	o.host = args[0]
-	o.port, err = strconv.Atoi(args[1])
+	a.host = args[0]
+	a.port, err = strconv.Atoi(args[1])
 	if err != nil {
 		return ErrNotCorrect
 	}
@@ -47,6 +47,7 @@ func (o *Address) GetPort() string {
 
 func (o *Address) GetHost() string {
 	return o.addr.host
+
 }
 
 func InitialFlags() *Address {
@@ -56,11 +57,10 @@ func InitialFlags() *Address {
 
 func (o *Address) ParseFlags(server bool) {
 
-	if server {
-		flag.Var(&o.addr, "a", "Host and port for connect/create")
-	} else {
+	if !server {
 		flag.IntVar(&o.ReportInterval, "r", 10, "Send to server interval")
 		flag.IntVar(&o.PollInterval, "p", 2, "Refresh metrics interval")
 	}
+	flag.Var(&o.addr, "a", "Host and port for connect/create")
 	flag.Parse()
 }
