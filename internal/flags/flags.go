@@ -29,10 +29,10 @@ func (a *addr) String() string {
 
 func (a *addr) Set(flagValue string) error {
 	args := strings.Split(flagValue, ":")
-	if len(args) != 2 {
-		panic(ErrNotCorrect)
-	}
 	a.host = args[0]
+	if len(args) == 0 || len(args) > 2 {
+		return ErrNotCorrect
+	}
 	a.port, err = strconv.Atoi(args[1])
 	if err != nil {
 		return ErrNotCorrect
@@ -53,9 +53,9 @@ func (o *Address) GetHost() string {
 
 }
 
-func InitialFlags() *Address {
+func InitialFlags() Address {
 	newInstance := Address{2, 10, addr{"localhost", 8080}}
-	return &newInstance
+	return newInstance
 }
 
 func (o *Address) ParseFlags(server bool) {
