@@ -77,6 +77,7 @@ func (o *Address) ParseFlags(server bool) {
 		if err != nil {
 			flag.IntVar(&o.ReportInterval, "r", 10, "Send to server interval")
 			flag.IntVar(&o.PollInterval, "p", 2, "Refresh metrics interval")
+			flag.Parse()
 		}
 	} else {
 		err := env.Parse(o.addr)
