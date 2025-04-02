@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/caarlos0/env/v6"
 )
 
 var ErrNotCorrect = errors.New("неправильно введен host:port")
@@ -18,9 +20,19 @@ type addr struct {
 }
 
 type Address struct {
-	ReportInterval int
-	PollInterval   int
-	addr           addr
+	ReportInterval int  `env:"reportInterval"`
+	PollInterval   int  `env:"pollInterval"`
+	addr           addr `env:"ADDRESS"`
+}
+
+func (a *addr) UnmarshalText(text []byte) error {
+	address := string(text)
+	err := a.Set(address)
+	if err != nil {
+		return err
+	} else {
+		return nil
+	}
 }
 
 func (a *addr) String() string {
@@ -61,9 +73,16 @@ func InitialFlags() Address {
 func (o *Address) ParseFlags(server bool) {
 
 	if !server {
-		flag.IntVar(&o.ReportInterval, "r", 10, "Send to server interval")
-		flag.IntVar(&o.PollInterval, "p", 2, "Refresh metrics interval")
+		err := env.Parse(o)
+		if err != nil {
+			flag.IntVar(&o.ReportInterval, "r", 10, "Send to server interval")
+			flag.IntVar(&o.PollInterval, "p", 2, "Refresh metrics interval")
+		}
+	} else {
+		err := env.Parse(o.addr)
+		if err != nil {
+			flag.Var(&o.addr, "a", "Host and port for connect/create")
+			flag.Parse()
+		}
 	}
-	flag.Var(&o.addr, "a", "Host and port for connect/create")
-	flag.Parse()
 }

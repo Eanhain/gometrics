@@ -42,7 +42,6 @@ func main() {
 
 	newStorage := storage.NewMemStorage()
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newStorage)
-
 	f := flags.InitialFlags()
 	f.ParseFlags(server)
 
