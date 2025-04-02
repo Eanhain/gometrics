@@ -72,16 +72,13 @@ func InitialFlags() Address {
 }
 
 func (o *Address) ParseFlags(server bool) {
-
+	env.Parse(o)
 	if !server {
-		env.Parse(o)
-		fmt.Println(o.PollInterval, o.ReportInterval)
 		flag.IntVar(&o.ReportInterval, "r", o.ReportInterval, "Send to server interval")
 		flag.IntVar(&o.PollInterval, "p", o.PollInterval, "Refresh metrics interval")
 		flag.Var(&o.Addr, "a", "Host and port for connect/create")
 		flag.Parse()
 	} else {
-		env.Parse(&o.Addr)
 		flag.Var(&o.Addr, "a", "Host and port for connect/create")
 		flag.Parse()
 	}

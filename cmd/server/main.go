@@ -17,7 +17,7 @@ func main() {
 
 	newHandler.CreateHandlers()
 	r := newHandler.GetRouter()
-
+	print(f.GetAddr().String())
 	err := http.ListenAndServe(f.GetAddr().String(), r)
 	if err != nil {
 		panic(err)
