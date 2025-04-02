@@ -14,19 +14,20 @@ var ErrNotCorrect = errors.New("неправильно введен host:port")
 
 var err error
 
-type addr struct {
-	host string
-	port int
+type Addr struct {
+	Host string
+	Port int
 }
 
 type Address struct {
-	ReportInterval int  `env:"reportInterval"`
-	PollInterval   int  `env:"pollInterval"`
-	addr           addr `env:"ADDRESS"`
+	ReportInterval int  `env:"REPORT_INTERVAL" envDefault:"10"`
+	PollInterval   int  `env:"POLL_INTERVAL" envDefault:"2"`
+	Addr           Addr `env:"ADDRESS" envDefault:"localhost:8080"`
 }
 
-func (a *addr) UnmarshalText(text []byte) error {
+func (a *Addr) UnmarshalText(text []byte) error {
 	address := string(text)
+	address = strings.TrimSuffix(strings.TrimPrefix(address, "\""), "\"")
 	err := a.Set(address)
 	if err != nil {
 		return err
@@ -35,55 +36,53 @@ func (a *addr) UnmarshalText(text []byte) error {
 	}
 }
 
-func (a *addr) String() string {
-	return fmt.Sprintf("%s:%v", a.host, a.port)
+func (a *Addr) String() string {
+	return fmt.Sprintf("%s:%v", a.Host, a.Port)
 }
 
-func (a *addr) Set(flagValue string) error {
+func (a *Addr) Set(flagValue string) error {
 	args := strings.Split(flagValue, ":")
-	a.host = args[0]
+	a.Host = args[0]
 	if len(args) == 0 || len(args) > 2 {
 		return ErrNotCorrect
 	}
-	a.port, err = strconv.Atoi(args[1])
+	a.Port, err = strconv.Atoi(args[1])
 	if err != nil {
 		return ErrNotCorrect
 	}
 	return nil
 }
 
-func (o *Address) GetAddr() *addr {
-	return &o.addr
+func (o *Address) GetAddr() *Addr {
+	return &o.Addr
 }
 
 func (o *Address) GetPort() string {
-	return fmt.Sprintf(":%v", o.addr.port)
+	return fmt.Sprintf(":%v", o.Addr.Port)
 }
 
 func (o *Address) GetHost() string {
-	return o.addr.host
+	return o.Addr.Host
 
 }
 
 func InitialFlags() Address {
-	newInstance := Address{2, 10, addr{"localhost", 8080}}
+	newInstance := Address{}
 	return newInstance
 }
 
 func (o *Address) ParseFlags(server bool) {
 
 	if !server {
-		err := env.Parse(o)
-		if err != nil {
-			flag.IntVar(&o.ReportInterval, "r", 10, "Send to server interval")
-			flag.IntVar(&o.PollInterval, "p", 2, "Refresh metrics interval")
-			flag.Parse()
-		}
+		env.Parse(o)
+		fmt.Println(o.PollInterval, o.ReportInterval)
+		flag.IntVar(&o.ReportInterval, "r", o.ReportInterval, "Send to server interval")
+		flag.IntVar(&o.PollInterval, "p", o.PollInterval, "Refresh metrics interval")
+		flag.Var(&o.Addr, "a", "Host and port for connect/create")
+		flag.Parse()
 	} else {
-		err := env.Parse(o.addr)
-		if err != nil {
-			flag.Var(&o.addr, "a", "Host and port for connect/create")
-			flag.Parse()
-		}
+		env.Parse(&o.Addr)
+		flag.Var(&o.Addr, "a", "Host and port for connect/create")
+		flag.Parse()
 	}
 }
