@@ -5,7 +5,7 @@ import (
 	"math/rand/v2"
 	"reflect"
 	"runtime"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -18,8 +18,8 @@ type runtimeUpdate struct {
 }
 
 type repositories interface {
-	GaugeInsert(key string, value string) int
-	CounterInsert(key string, rawValue string) int
+	GaugeInsert(key string, value float64) int
+	CounterInsert(key string, value int) int
 	GetUpdateUrls(host string, port string) []string
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
@@ -34,25 +34,20 @@ func NewRuntimeUpdater(storage repositories) *runtimeUpdate {
 	}
 }
 
-func (ru *runtimeUpdate) ConvertToString(rawValue reflect.Value) string {
+func (ru *runtimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
+	TypeError := fmt.Errorf("неверный тип данных %s, %s", rawValue, rawValue.Kind())
 	valueType := rawValue.Kind().String()
 	switch valueType {
 	case "uint64":
-		uintValue := strconv.FormatUint(rawValue.Uint(), 10)
-		return uintValue
+		return float64(rawValue.Uint()), nil
 	case "uint32":
-		uintValue := strconv.FormatUint(rawValue.Uint(), 10)
-		return uintValue
+		return float64(rawValue.Uint()), nil
 	case "float64":
-		floatValue := fmt.Sprintf("%f", rawValue.Float())
-		return floatValue
+		return rawValue.Float(), nil
 	case "float32":
-		floatValue := fmt.Sprintf("%f", rawValue.Float())
-		return floatValue
-	case "string":
-		return rawValue.String()
+		return rawValue.Float(), nil
 	default:
-		return "error"
+		return -1, TypeError
 	}
 
 }
@@ -63,16 +58,14 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 	for _, metricName := range metrics {
 		metricValue := v.FieldByName(metricName)
 		ValueNotFound := fmt.Errorf("по переданному ключу %v не найдено значения", metricName)
-		TypeError := fmt.Errorf("неверный тип данных %s: %s", metricName, metricValue.Kind())
 		if !metricValue.IsValid() {
 			return ValueNotFound
 		}
-		metricStringValue := ru.ConvertToString(metricValue)
-		if metricStringValue != "error" {
-			ru.storage.GaugeInsert(metricName, metricStringValue)
-		} else {
-			return TypeError
+		value, err := ru.ParseGauge(metricValue)
+		if err != nil {
+			return err
 		}
+		ru.storage.GaugeInsert(strings.ToLower(metricName), value)
 	}
 	return nil
 }
@@ -102,8 +95,8 @@ func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) {
 		if err != nil {
 			panic(err)
 		}
-		ru.storage.CounterInsert("PollCount", "1")
-		ru.storage.GaugeInsert("RandomValue", fmt.Sprintf("%v", rand.Float64()))
+		ru.storage.CounterInsert("pollcount", 1)
+		ru.storage.GaugeInsert("randomvalue", rand.Float64())
 		time.Sleep(refreshTimeDuration * time.Second)
 	}
 }
