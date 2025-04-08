@@ -31,33 +31,21 @@ func (h *handlerService) GetRouter() *chi.Mux {
 	return h.router
 }
 
-func (h *handlerService) routeUpdateFunc(r chi.Router) {
-	r.Post("/{type}/{name}/{value}", h.UpdateMetrics)
-}
-
-func (h *handlerService) routeValueFunc(r chi.Router) {
-	r.Get("/{type}/{name}", h.GetMetrics)
-}
-
-func (h *handlerService) routeRootFunc(r chi.Router) {
-	r.Get("/", h.showAllMetrics)
-}
-
 func (h *handlerService) CreateHandlers() {
-	h.router.Route("/", h.routeRootFunc)
-	h.router.Route("/update/", h.routeUpdateFunc)
-	h.router.Route("/value/", h.routeValueFunc)
+	h.router.Group(func(r chi.Router) {
+		r.Get("/", h.showAllMetrics)
+		r.Post("/update/{type}/{name}/{value}", h.UpdateMetrics)
+		r.Get("/value/{type}/{name}", h.GetMetrics)
+	})
 }
 
 func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
 	metrics := h.storage.GetAllMetrics()
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// fmt.Fprintf(res, "<ul>")
 	format := "%s: %s<br>"
 	for key, value := range metrics {
 		fmt.Fprintf(res, format, key, value)
 	}
-	// fmt.Fprintf(res, "</ul>")
 }
 
 func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) {
@@ -88,7 +76,6 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 	typeMetric := chi.URLParam(req, "type")
 	nameMetric := chi.URLParam(req, "name")
 	valueMetric := chi.URLParam(req, "value")
-	// fmt.Printf("Инсертим %s: %s = %s \n", typeMetric, nameMetric, valueMetric)
 	switch typeMetric {
 	case "gauge":
 		res.WriteHeader(h.storage.GaugeInsert(nameMetric, valueMetric))
