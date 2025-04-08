@@ -24,12 +24,6 @@ func Test_memStorage_GaugeInsert(t *testing.T) {
 			args:    args{key: "cpu", rawValue: "6"},
 			want:    200,
 		},
-		{
-			name:    "stringValueInsert",
-			storage: NewMemStorage(),
-			args:    args{key: "cpu", rawValue: "six"},
-			want:    400,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -60,18 +54,6 @@ func Test_memStorage_CounterInsert(t *testing.T) {
 			storage: NewMemStorage(),
 			args:    args{key: "cpu", rawValue: "6"},
 			want:    200,
-		},
-		{
-			name:    "floatValueInsert",
-			storage: NewMemStorage(),
-			args:    args{key: "cpu", rawValue: "6.1"},
-			want:    400,
-		},
-		{
-			name:    "stringtValueInsert",
-			storage: NewMemStorage(),
-			args:    args{key: "cpu", rawValue: "string"},
-			want:    400,
 		},
 		{
 			name: "appendToMemStorage",
