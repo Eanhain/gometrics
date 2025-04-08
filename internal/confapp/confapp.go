@@ -1,4 +1,4 @@
-package flags
+package confapp
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"github.com/caarlos0/env/v6"
 )
 
-var ErrNotCorrect = errors.New("неправильно введен host:port")
+var ErrNotCorrect = errors.New("wrong host:port")
 
 var err error
 
