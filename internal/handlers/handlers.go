@@ -3,6 +3,8 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -13,8 +15,8 @@ type handlerService struct {
 }
 
 type repositories interface {
-	GaugeInsert(key string, value string) int
-	CounterInsert(key string, value string) int
+	GaugeInsert(key string, value float64) int
+	CounterInsert(key string, value int) int
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
 	GetAllMetrics() map[string]string
@@ -88,9 +90,21 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 	valueMetric := chi.URLParam(req, "value")
 	switch typeMetric {
 	case "gauge":
-		res.WriteHeader(h.storage.GaugeInsert(nameMetric, valueMetric))
+		key := strings.ToLower(nameMetric)
+		value, err := strconv.ParseFloat(valueMetric, 64)
+		if err != nil {
+			res.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		res.WriteHeader(h.storage.GaugeInsert(key, value))
 	case "counter":
-		res.WriteHeader(h.storage.CounterInsert(nameMetric, valueMetric))
+		key := strings.ToLower(nameMetric)
+		value, err := strconv.Atoi(valueMetric)
+		if err != nil {
+			res.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		res.WriteHeader(h.storage.CounterInsert(key, value))
 	default:
 		http.Error(res, "invalid action type", http.StatusBadRequest)
 		return

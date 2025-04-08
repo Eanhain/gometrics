@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -64,22 +63,12 @@ func (storage *MemStorage) GetUpdateUrls(host string, port string) []string {
 	return allUrls
 }
 
-func (storage *MemStorage) GaugeInsert(key string, rawValue string) int {
-	key = strings.ToLower(key)
-	value, err := strconv.ParseFloat(rawValue, 64)
-	if err != nil {
-		return http.StatusBadRequest
-	}
+func (storage *MemStorage) GaugeInsert(key string, value float64) int {
 	storage.gauge[key] = value
 	return http.StatusOK
 }
 
-func (storage *MemStorage) CounterInsert(key string, rawValue string) int {
-	key = strings.ToLower(key)
-	value, err := strconv.Atoi(rawValue)
-	if err != nil {
-		return http.StatusBadRequest
-	}
+func (storage *MemStorage) CounterInsert(key string, value int) int {
 	storage.counter[key] += value
 	return http.StatusOK
 }
