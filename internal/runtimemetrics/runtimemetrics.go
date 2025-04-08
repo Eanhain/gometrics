@@ -35,7 +35,7 @@ func NewRuntimeUpdater(storage repositories) *runtimeUpdate {
 }
 
 func (ru *runtimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
-	TypeError := fmt.Errorf("неверный тип данных %s, %s", rawValue, rawValue.Kind())
+	TypeError := fmt.Errorf("wrong data type %s", rawValue.Kind())
 	valueType := rawValue.Kind().String()
 	switch valueType {
 	case "uint64":
@@ -57,7 +57,7 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 	v := reflect.ValueOf(ru.memMetrics)
 	for _, metricName := range metrics {
 		metricValue := v.FieldByName(metricName)
-		ValueNotFound := fmt.Errorf("по переданному ключу %v не найдено значения", metricName)
+		ValueNotFound := fmt.Errorf("can't find value by this key %v", metricName)
 		if !metricValue.IsValid() {
 			return ValueNotFound
 		}
