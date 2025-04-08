@@ -28,13 +28,13 @@ func Test_runtimeUpdate_FillRepo(t *testing.T) {
 			name:    "Wrong key",
 			ru:      NewRuntimeUpdater(storage.NewMemStorage()),
 			args:    args{metrics: []string{"NewMetric"}},
-			wantErr: fmt.Errorf("не найдено значения"),
+			wantErr: fmt.Errorf("can't find value by this key"),
 		},
 		{
 			name:    "Wrong type",
 			ru:      NewRuntimeUpdater(storage.NewMemStorage()),
 			args:    args{metrics: []string{"BySize"}},
-			wantErr: fmt.Errorf("неверный тип данных"),
+			wantErr: fmt.Errorf("wrong data type"),
 		},
 	}
 	for _, tt := range tests {
