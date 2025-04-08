@@ -56,19 +56,20 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 	case "gauge":
 		value, err := h.storage.GetGauge(nameMetric)
 		if err != nil {
-			res.WriteHeader(http.StatusNotFound)
-		} else {
-			fmt.Fprintf(res, format, value)
+			http.Error(res, "gauge metric not found", http.StatusNotFound)
+			return
 		}
+		fmt.Fprintf(res, format, value)
 	case "counter":
 		value, err := h.storage.GetCounter(nameMetric)
 		if err != nil {
-			res.WriteHeader(http.StatusNotFound)
-		} else {
-			fmt.Fprintf(res, format, value)
+			http.Error(res, "counter metric not found", http.StatusNotFound)
+			return
 		}
+		fmt.Fprintf(res, format, value)
 	default:
-		res.WriteHeader(http.StatusBadRequest)
+		http.Error(res, "invalid metric type", http.StatusBadRequest)
+		return
 	}
 }
 
@@ -82,7 +83,8 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 	case "counter":
 		res.WriteHeader(h.storage.CounterInsert(nameMetric, valueMetric))
 	default:
-		res.WriteHeader(http.StatusBadRequest)
+		http.Error(res, "invalid action type", http.StatusBadRequest)
+		return
 
 	}
 
