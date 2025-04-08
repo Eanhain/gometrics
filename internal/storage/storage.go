@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 var ErrNotFound = errors.New("resource was not found")
 
 type MemStorage struct {
+	mu      sync.RWMutex
 	gauge   map[string]float64
 	counter map[string]int
 }
@@ -22,6 +24,10 @@ func NewMemStorage() *MemStorage {
 }
 
 func (storage *MemStorage) GetGauge(key string) (float64, error) {
+
+	storage.mu.RLock()
+	defer storage.mu.RUnlock()
+
 	key = strings.ToLower(key)
 	val, ok := storage.gauge[key]
 	if ok {
@@ -31,6 +37,10 @@ func (storage *MemStorage) GetGauge(key string) (float64, error) {
 }
 
 func (storage *MemStorage) GetCounter(key string) (int, error) {
+
+	storage.mu.RLock()
+	defer storage.mu.RUnlock()
+
 	key = strings.ToLower(key)
 	val, ok := storage.counter[key]
 	if ok {
@@ -64,11 +74,19 @@ func (storage *MemStorage) GetUpdateUrls(host string, port string) []string {
 }
 
 func (storage *MemStorage) GaugeInsert(key string, value float64) int {
+
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+
 	storage.gauge[key] = value
 	return http.StatusOK
 }
 
 func (storage *MemStorage) CounterInsert(key string, value int) int {
+
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+
 	storage.counter[key] += value
 	return http.StatusOK
 }
