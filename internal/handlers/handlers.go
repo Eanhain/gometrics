@@ -44,7 +44,10 @@ func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Reque
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	format := "%s: %s<br>"
 	for key, value := range metrics {
-		fmt.Fprintf(res, format, key, value)
+		_, err := fmt.Fprintf(res, format, key, value)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -59,14 +62,20 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 			http.Error(res, "gauge metric not found", http.StatusNotFound)
 			return
 		}
-		fmt.Fprintf(res, format, value)
+		_, err = fmt.Fprintf(res, format, value)
+		if err != nil {
+			panic(err)
+		}
 	case "counter":
 		value, err := h.storage.GetCounter(nameMetric)
 		if err != nil {
 			http.Error(res, "counter metric not found", http.StatusNotFound)
 			return
 		}
-		fmt.Fprintf(res, format, value)
+		_, err = fmt.Fprintf(res, format, value)
+		if err != nil {
+			panic(err)
+		}
 	default:
 		http.Error(res, "invalid metric type", http.StatusBadRequest)
 		return

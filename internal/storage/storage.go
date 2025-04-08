@@ -27,10 +27,8 @@ func (storage *MemStorage) GetGauge(key string) (float64, error) {
 	val, ok := storage.gauge[key]
 	if ok {
 		return val, nil
-	} else {
-		return val, ErrNotFound
 	}
-
+	return val, ErrNotFound
 }
 
 func (storage *MemStorage) GetCounter(key string) (int, error) {
@@ -38,10 +36,8 @@ func (storage *MemStorage) GetCounter(key string) (int, error) {
 	val, ok := storage.counter[key]
 	if ok {
 		return val, nil
-	} else {
-		return val, ErrNotFound
 	}
-
+	return val, ErrNotFound
 }
 
 func (storage *MemStorage) GetAllMetrics() map[string]string {
@@ -73,11 +69,9 @@ func (storage *MemStorage) GaugeInsert(key string, rawValue string) int {
 	value, err := strconv.ParseFloat(rawValue, 64)
 	if err != nil {
 		return http.StatusBadRequest
-	} else {
-		storage.gauge[key] = value
-		return http.StatusOK
 	}
-
+	storage.gauge[key] = value
+	return http.StatusOK
 }
 
 func (storage *MemStorage) CounterInsert(key string, rawValue string) int {
@@ -85,8 +79,7 @@ func (storage *MemStorage) CounterInsert(key string, rawValue string) int {
 	value, err := strconv.Atoi(rawValue)
 	if err != nil {
 		return http.StatusBadRequest
-	} else {
-		storage.counter[key] += value
-		return http.StatusOK
 	}
+	storage.counter[key] += value
+	return http.StatusOK
 }

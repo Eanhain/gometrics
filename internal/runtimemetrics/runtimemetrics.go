@@ -66,13 +66,12 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 		TypeError := fmt.Errorf("неверный тип данных %s: %s", metricName, metricValue.Kind())
 		if !metricValue.IsValid() {
 			return ValueNotFound
+		}
+		metricStringValue := ru.ConvertToString(metricValue)
+		if metricStringValue != "error" {
+			ru.storage.GaugeInsert(metricName, metricStringValue)
 		} else {
-			metricStringValue := ru.ConvertToString(metricValue)
-			if metricStringValue != "error" {
-				ru.storage.GaugeInsert(metricName, metricStringValue)
-			} else {
-				return TypeError
-			}
+			return TypeError
 		}
 	}
 	return nil
@@ -99,7 +98,10 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
 func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) {
 	refreshTimeDuration := time.Duration(refreshTime)
 	for {
-		ru.FillRepo(metrics)
+		err := ru.FillRepo(metrics)
+		if err != nil {
+			panic(err)
+		}
 		ru.storage.CounterInsert("PollCount", "1")
 		ru.storage.GaugeInsert("RandomValue", fmt.Sprintf("%v", rand.Float64()))
 		time.Sleep(refreshTimeDuration * time.Second)
