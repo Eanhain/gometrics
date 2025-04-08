@@ -50,6 +50,8 @@ func (storage *MemStorage) GetCounter(key string) (int, error) {
 }
 
 func (storage *MemStorage) GetAllMetrics() map[string]string {
+	storage.mu.RLock()
+	defer storage.mu.RUnlock()
 	output := make(map[string]string)
 	for key, value := range storage.gauge {
 		output["gauge "+key] = fmt.Sprintf("%v", value)
@@ -61,6 +63,8 @@ func (storage *MemStorage) GetAllMetrics() map[string]string {
 }
 
 func (storage *MemStorage) GetUpdateUrls(host string, port string) []string {
+	storage.mu.RLock()
+	defer storage.mu.RUnlock()
 	allUrls := []string{}
 	for key, value := range storage.gauge {
 		url := fmt.Sprintf("http://%s%s/update/gauge/%s/%v", host, port, key, value)
