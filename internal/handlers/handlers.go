@@ -93,7 +93,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 		key := strings.ToLower(nameMetric)
 		value, err := strconv.ParseFloat(valueMetric, 64)
 		if err != nil {
-			res.WriteHeader(http.StatusBadRequest)
+			http.Error(res, "could not parse gaude metric", http.StatusBadRequest)
 			return
 		}
 		res.WriteHeader(h.storage.GaugeInsert(key, value))
@@ -101,7 +101,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 		key := strings.ToLower(nameMetric)
 		value, err := strconv.Atoi(valueMetric)
 		if err != nil {
-			res.WriteHeader(http.StatusBadRequest)
+			http.Error(res, "could not parse counter metric", http.StatusBadRequest)
 			return
 		}
 		res.WriteHeader(h.storage.CounterInsert(key, value))
