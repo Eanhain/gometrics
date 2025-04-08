@@ -1,11 +1,13 @@
 package main
 
 import (
-	"gometrics/internal/confclient"
+	"gometrics/internal/flags"
 	"gometrics/internal/runtimemetrics"
 	"gometrics/internal/storage"
 	"sync"
 )
+
+var server = false
 
 func main() {
 	metrics := []string{
@@ -40,8 +42,8 @@ func main() {
 
 	newStorage := storage.NewMemStorage()
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newStorage)
-	f := confclient.InitialFlags()
-	f.ParseFlags()
+	f := flags.InitialFlags()
+	f.ParseFlags(server)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -53,7 +55,7 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		metricsGen.SendMetrics(f.Addr.GetAddr(), f.Addr.GetPort(), f.ReportInterval)
+		metricsGen.SendMetrics(f.GetHost(), f.GetPort(), f.ReportInterval)
 	}()
 
 	wg.Wait()
