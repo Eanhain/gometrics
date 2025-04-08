@@ -1,19 +1,17 @@
 package main
 
 import (
-	"gometrics/internal/flags"
 	"gometrics/internal/handlers"
+	"gometrics/internal/serverflags"
 	"gometrics/internal/storage"
 	"net/http"
 )
 
-var server = true
-
 func main() {
 	newStorage := storage.NewMemStorage()
 	newHandler := handlers.NewHandlerService(newStorage)
-	f := flags.InitialFlags()
-	f.ParseFlags(server)
+	f := serverflags.InitialFlags()
+	f.ParseFlags()
 
 	newHandler.CreateHandlers()
 	r := newHandler.GetRouter()

@@ -1,4 +1,4 @@
-package flags
+package serverflags
 
 import (
 	"errors"
