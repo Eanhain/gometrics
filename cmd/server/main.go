@@ -9,8 +9,7 @@ import (
 )
 
 func main() {
-	newStorage := storage.NewMemStorage()
-	newHandler := handlers.NewHandlerService(service.NewService(newStorage))
+	newHandler := handlers.NewHandlerService(service.NewService(storage.NewMemStorage()))
 	f := serverflags.InitialFlags()
 	f.ParseFlags()
 
