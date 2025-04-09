@@ -38,7 +38,9 @@ func main() {
 		"Sys",
 		"TotalAlloc",
 	}
-	metricsGen := runtimemetrics.NewRuntimeUpdater(service.NewService(storage.NewMemStorage()))
+
+	newService := service.NewService(storage.NewMemStorage())
+	metricsGen := runtimemetrics.NewRuntimeUpdater(newService)
 	f := clientflags.InitialFlags()
 	f.ParseFlags()
 
