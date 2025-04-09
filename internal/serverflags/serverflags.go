@@ -3,14 +3,22 @@ package serverflags
 import (
 	"flag"
 	"fmt"
-
 	"gometrics/internal/addr"
 
 	"github.com/caarlos0/env/v6"
 )
 
+type Addr interface {
+	UnmarshalText([]byte) error
+	String() string
+	Set(string) error
+	GetHost() string
+	GetPort() int
+	GetAddr() string
+}
+
 type ServerConfigs struct {
-	Addr addr.Interface `env:"ADDRESS" envDefault:"localhost:8080"`
+	Addr Addr `env:"ADDRESS" envDefault:"localhost:8080"`
 }
 
 func (o *ServerConfigs) GetPort() string {
@@ -19,6 +27,10 @@ func (o *ServerConfigs) GetPort() string {
 
 func (o *ServerConfigs) GetHost() string {
 	return o.Addr.GetHost()
+}
+
+func (o *ServerConfigs) GetAddr() string {
+	return o.Addr.GetAddr()
 }
 
 func InitialFlags() ServerConfigs {

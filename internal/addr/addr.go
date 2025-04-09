@@ -9,14 +9,6 @@ import (
 
 var ErrNotCorrect = errors.New("wrong host:port")
 
-type Interface interface {
-	UnmarshalText([]byte) error
-	String() string
-	Set(string) error
-	GetHost() string
-	GetPort() int
-}
-
 type Addr struct {
 	Host string
 	Port int
@@ -52,4 +44,8 @@ func (a *Addr) GetHost() string {
 
 func (a *Addr) GetPort() int {
 	return a.Port
+}
+
+func (a *Addr) GetAddr() string {
+	return a.String()
 }

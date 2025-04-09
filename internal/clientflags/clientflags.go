@@ -9,10 +9,19 @@ import (
 	"github.com/caarlos0/env/v6"
 )
 
+type Addr interface {
+	UnmarshalText([]byte) error
+	String() string
+	Set(string) error
+	GetHost() string
+	GetPort() int
+	GetAddr() string
+}
+
 type ClientConfig struct {
-	ReportInterval int            `env:"REPORT_INTERVAL" envDefault:"10"`
-	PollInterval   int            `env:"POLL_INTERVAL" envDefault:"2"`
-	Addr           addr.Interface `env:"ADDRESS" envDefault:"localhost:8080"`
+	ReportInterval int  `env:"REPORT_INTERVAL" envDefault:"10"`
+	PollInterval   int  `env:"POLL_INTERVAL" envDefault:"2"`
+	Addr           Addr `env:"ADDRESS" envDefault:"localhost:8080"`
 }
 
 func (o *ClientConfig) GetPort() string {
