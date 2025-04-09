@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strings"
 )
 
 type Storage interface {
@@ -22,10 +23,12 @@ func NewService(inst Storage) *Service {
 }
 
 func (s *Service) GetGauge(key string) (float64, error) {
+	key = strings.ToLower(key)
 	return (*s.store).GetGauge(key)
 }
 
 func (s *Service) GetCounter(key string) (int, error) {
+	key = strings.ToLower(key)
 	return (*s.store).GetCounter(key)
 }
 
@@ -41,10 +44,12 @@ func (s *Service) GetAllMetrics() map[string]string {
 }
 
 func (s *Service) GaugeInsert(key string, value float64) int {
+	key = strings.ToLower(key)
 	return (*s.store).GaugeInsert(key, value)
 }
 
 func (s *Service) CounterInsert(key string, value int) int {
+	key = strings.ToLower(key)
 	return (*s.store).CounterInsert(key, value)
 }
 

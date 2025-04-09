@@ -22,10 +22,8 @@ func NewMemStorage() *MemStorage {
 }
 
 func (storage *MemStorage) GetGauge(key string) (float64, error) {
-
 	storage.mu.RLock()
 	defer storage.mu.RUnlock()
-
 	val, ok := storage.gauge[key]
 	if ok {
 		return val, nil
@@ -34,10 +32,8 @@ func (storage *MemStorage) GetGauge(key string) (float64, error) {
 }
 
 func (storage *MemStorage) GetCounter(key string) (int, error) {
-
 	storage.mu.RLock()
 	defer storage.mu.RUnlock()
-
 	val, ok := storage.counter[key]
 	if ok {
 		return val, nil
@@ -46,10 +42,8 @@ func (storage *MemStorage) GetCounter(key string) (int, error) {
 }
 
 func (storage *MemStorage) GaugeInsert(key string, value float64) int {
-
 	storage.mu.Lock()
 	defer storage.mu.Unlock()
-
 	storage.gauge[key] = value
 	return http.StatusOK
 }

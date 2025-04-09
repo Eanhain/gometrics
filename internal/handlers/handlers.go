@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -90,21 +89,19 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 	valueMetric := chi.URLParam(req, "value")
 	switch typeMetric {
 	case "gauge":
-		key := strings.ToLower(nameMetric)
 		value, err := strconv.ParseFloat(valueMetric, 64)
 		if err != nil {
 			http.Error(res, "could not parse gaude metric", http.StatusBadRequest)
 			return
 		}
-		res.WriteHeader(h.service.GaugeInsert(key, value))
+		res.WriteHeader(h.service.GaugeInsert(nameMetric, value))
 	case "counter":
-		key := strings.ToLower(nameMetric)
 		value, err := strconv.Atoi(valueMetric)
 		if err != nil {
 			http.Error(res, "could not parse counter metric", http.StatusBadRequest)
 			return
 		}
-		res.WriteHeader(h.service.CounterInsert(key, value))
+		res.WriteHeader(h.service.CounterInsert(nameMetric, value))
 	default:
 		http.Error(res, "invalid action type", http.StatusBadRequest)
 		return
