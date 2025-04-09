@@ -32,7 +32,7 @@ func InitialFlags() ServerConfigs {
 
 func (o *ServerConfigs) ParseFlags() {
 	if err := env.Parse(o); err != nil {
-		fmt.Println("ENV var not found")
+		fmt.Println("env vars not found")
 	}
 	flag.Var(&o.Addr, "a", "Host and port for connect/create")
 	flag.Parse()

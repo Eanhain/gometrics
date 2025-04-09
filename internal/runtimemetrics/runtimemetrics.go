@@ -79,7 +79,7 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
 				SetHeader("Content-Type", "text/plain").
 				Post(url)
 			if err != nil {
-				fmt.Printf("Не получилось отправить метрику %v\n", url)
+				fmt.Printf("Can't send metric %v\n", url)
 				break
 			}
 		}
@@ -95,8 +95,8 @@ func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) {
 		if err != nil {
 			panic(err)
 		}
-		ru.service.CounterInsert("pollcount", 1)
-		ru.service.GaugeInsert("randomvalue", rand.Float64())
+		ru.service.CounterInsert("PollCount", 1)
+		ru.service.GaugeInsert("RandomValue", rand.Float64())
 		time.Sleep(refreshTimeDuration * time.Second)
 	}
 }
