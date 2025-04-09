@@ -2,9 +2,7 @@ package storage
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 )
 
@@ -28,7 +26,6 @@ func (storage *MemStorage) GetGauge(key string) (float64, error) {
 	storage.mu.RLock()
 	defer storage.mu.RUnlock()
 
-	key = strings.ToLower(key)
 	val, ok := storage.gauge[key]
 	if ok {
 		return val, nil
@@ -41,40 +38,11 @@ func (storage *MemStorage) GetCounter(key string) (int, error) {
 	storage.mu.RLock()
 	defer storage.mu.RUnlock()
 
-	key = strings.ToLower(key)
 	val, ok := storage.counter[key]
 	if ok {
 		return val, nil
 	}
 	return val, ErrNotFound
-}
-
-func (storage *MemStorage) GetAllMetrics() map[string]string {
-	storage.mu.RLock()
-	defer storage.mu.RUnlock()
-	output := make(map[string]string)
-	for key, value := range storage.gauge {
-		output["gauge "+key] = fmt.Sprintf("%v", value)
-	}
-	for key, value := range storage.counter {
-		output["counter "+key] = fmt.Sprintf("%v", value)
-	}
-	return output
-}
-
-func (storage *MemStorage) GetUpdateUrls(host string, port string) []string {
-	storage.mu.RLock()
-	defer storage.mu.RUnlock()
-	allUrls := []string{}
-	for key, value := range storage.gauge {
-		url := fmt.Sprintf("http://%s%s/update/gauge/%s/%v", host, port, key, value)
-		allUrls = append(allUrls, url)
-	}
-	for key, value := range storage.counter {
-		url := fmt.Sprintf("http://%s%s/update/counter/%s/%v", host, port, key, value)
-		allUrls = append(allUrls, url)
-	}
-	return allUrls
 }
 
 func (storage *MemStorage) GaugeInsert(key string, value float64) int {
@@ -93,4 +61,16 @@ func (storage *MemStorage) CounterInsert(key string, value int) int {
 
 	storage.counter[key] += value
 	return http.StatusOK
+}
+
+func (storage *MemStorage) GetGaugeMap() map[string]float64 {
+	storage.mu.RLock()
+	defer storage.mu.RUnlock()
+	return storage.gauge
+}
+
+func (storage *MemStorage) GetCounterMap() map[string]int {
+	storage.mu.RLock()
+	defer storage.mu.RUnlock()
+	return storage.counter
 }

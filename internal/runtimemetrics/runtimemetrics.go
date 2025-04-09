@@ -12,12 +12,12 @@ import (
 )
 
 type runtimeUpdate struct {
-	storage    repositories
+	service    serviceInt
 	memMetrics runtime.MemStats
 	client     *resty.Client
 }
 
-type repositories interface {
+type serviceInt interface {
 	GaugeInsert(key string, value float64) int
 	CounterInsert(key string, value int) int
 	GetUpdateUrls(host string, port string) []string
@@ -26,9 +26,9 @@ type repositories interface {
 	GetAllMetrics() map[string]string
 }
 
-func NewRuntimeUpdater(storage repositories) *runtimeUpdate {
+func NewRuntimeUpdater(service serviceInt) *runtimeUpdate {
 	return &runtimeUpdate{
-		storage:    storage,
+		service:    service,
 		memMetrics: runtime.MemStats{},
 		client:     resty.New(),
 	}
@@ -65,7 +65,7 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 		if err != nil {
 			return err
 		}
-		ru.storage.GaugeInsert(strings.ToLower(metricName), value)
+		ru.service.GaugeInsert(strings.ToLower(metricName), value)
 	}
 	return nil
 }
@@ -73,7 +73,7 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
 	sendTimeDuration := time.Duration(sendTime)
 	for {
-		urls := ru.storage.GetUpdateUrls(host, port)
+		urls := ru.service.GetUpdateUrls(host, port)
 		for _, url := range urls {
 			_, err := ru.client.R().
 				SetHeader("Content-Type", "text/plain").
@@ -95,8 +95,8 @@ func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) {
 		if err != nil {
 			panic(err)
 		}
-		ru.storage.CounterInsert("pollcount", 1)
-		ru.storage.GaugeInsert("randomvalue", rand.Float64())
+		ru.service.CounterInsert("pollcount", 1)
+		ru.service.GaugeInsert("randomvalue", rand.Float64())
 		time.Sleep(refreshTimeDuration * time.Second)
 	}
 }

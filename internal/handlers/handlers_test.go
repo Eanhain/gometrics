@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"gometrics/internal/service"
 	"gometrics/internal/storage"
 	"io"
 	"net/http"
@@ -101,7 +102,7 @@ func Test_handlerService_CreateHandlers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(storage.NewMemStorage())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage()))
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()

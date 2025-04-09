@@ -3,6 +3,7 @@ package main
 import (
 	"gometrics/internal/clientflags"
 	"gometrics/internal/runtimemetrics"
+	"gometrics/internal/service"
 	"gometrics/internal/storage"
 	"sync"
 )
@@ -38,8 +39,8 @@ func main() {
 		"TotalAlloc",
 	}
 
-	newStorage := storage.NewMemStorage()
-	metricsGen := runtimemetrics.NewRuntimeUpdater(newStorage)
+	newService := service.NewService(storage.NewMemStorage())
+	metricsGen := runtimemetrics.NewRuntimeUpdater(newService)
 	f := clientflags.InitialFlags()
 	f.ParseFlags()
 

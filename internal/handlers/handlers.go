@@ -10,11 +10,11 @@ import (
 )
 
 type handlerService struct {
-	storage repositories
+	service serviceInt
 	router  *chi.Mux
 }
 
-type repositories interface {
+type serviceInt interface {
 	GaugeInsert(key string, value float64) int
 	CounterInsert(key string, value int) int
 	GetGauge(key string) (float64, error)
@@ -22,9 +22,9 @@ type repositories interface {
 	GetAllMetrics() map[string]string
 }
 
-func NewHandlerService(storage repositories) *handlerService {
+func NewHandlerService(service serviceInt) *handlerService {
 	return &handlerService{
-		storage: storage,
+		service: service,
 		router:  chi.NewRouter(),
 	}
 }
@@ -42,7 +42,7 @@ func (h *handlerService) CreateHandlers() {
 }
 
 func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
-	metrics := h.storage.GetAllMetrics()
+	metrics := h.service.GetAllMetrics()
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	format := "%s: %s<br>"
 	for key, value := range metrics {
@@ -59,7 +59,7 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 	format := "%v"
 	switch typeMetric {
 	case "gauge":
-		value, err := h.storage.GetGauge(nameMetric)
+		value, err := h.service.GetGauge(nameMetric)
 		if err != nil {
 			http.Error(res, "gauge metric not found", http.StatusNotFound)
 			return
@@ -69,7 +69,7 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 			panic(err)
 		}
 	case "counter":
-		value, err := h.storage.GetCounter(nameMetric)
+		value, err := h.service.GetCounter(nameMetric)
 		if err != nil {
 			http.Error(res, "counter metric not found", http.StatusNotFound)
 			return
@@ -96,7 +96,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 			http.Error(res, "could not parse gaude metric", http.StatusBadRequest)
 			return
 		}
-		res.WriteHeader(h.storage.GaugeInsert(key, value))
+		res.WriteHeader(h.service.GaugeInsert(key, value))
 	case "counter":
 		key := strings.ToLower(nameMetric)
 		value, err := strconv.Atoi(valueMetric)
@@ -104,7 +104,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 			http.Error(res, "could not parse counter metric", http.StatusBadRequest)
 			return
 		}
-		res.WriteHeader(h.storage.CounterInsert(key, value))
+		res.WriteHeader(h.service.CounterInsert(key, value))
 	default:
 		http.Error(res, "invalid action type", http.StatusBadRequest)
 		return
