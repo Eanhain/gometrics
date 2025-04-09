@@ -14,44 +14,44 @@ type Storage interface {
 }
 
 type Service struct {
-	store Storage
+	store *Storage
 }
 
 func NewService(inst Storage) *Service {
-	return &Service{store: inst}
+	return &Service{store: &inst}
 }
 
 func (s *Service) GetGauge(key string) (float64, error) {
-	return s.store.GetGauge(key)
+	return (*s.store).GetGauge(key)
 }
 
 func (s *Service) GetCounter(key string) (int, error) {
-	return s.store.GetCounter(key)
+	return (*s.store).GetCounter(key)
 }
 
 func (s *Service) GetAllMetrics() map[string]string {
 	result := make(map[string]string)
-	for key, gauge := range s.store.GetGaugeMap() {
+	for key, gauge := range (*s.store).GetGaugeMap() {
 		result[key] = fmt.Sprintf("%v", gauge)
 	}
-	for key, counter := range s.store.GetCounterMap() {
+	for key, counter := range (*s.store).GetCounterMap() {
 		result[key] = fmt.Sprintf("%v", counter)
 	}
 	return result
 }
 
 func (s *Service) GaugeInsert(key string, value float64) int {
-	return s.store.GaugeInsert(key, value)
+	return (*s.store).GaugeInsert(key, value)
 }
 
 func (s *Service) CounterInsert(key string, value int) int {
-	return s.store.CounterInsert(key, value)
+	return (*s.store).CounterInsert(key, value)
 }
 
 func (s *Service) GetUpdateUrls(host string, port string) []string {
 	urls := []string{}
-	gaugeMap := s.store.GetGaugeMap()
-	counterMap := s.store.GetCounterMap()
+	gaugeMap := (*s.store).GetGaugeMap()
+	counterMap := (*s.store).GetCounterMap()
 	for key, value := range gaugeMap {
 		url := fmt.Sprintf("http://%s%s/update/gauge/%s/%v", host, port, key, value)
 		urls = append(urls, url)
