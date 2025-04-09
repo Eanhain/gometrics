@@ -8,17 +8,8 @@ import (
 	"github.com/caarlos0/env/v6"
 )
 
-type Addr interface {
-	UnmarshalText([]byte) error
-	String() string
-	Set(string) error
-	GetHost() string
-	GetPort() int
-	GetAddr() string
-}
-
 type ServerConfigs struct {
-	Addr Addr `env:"ADDRESS" envDefault:"localhost:8080"`
+	Addr addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
 }
 
 func (o *ServerConfigs) GetPort() string {
@@ -35,14 +26,14 @@ func (o *ServerConfigs) GetAddr() string {
 
 func InitialFlags() ServerConfigs {
 	return ServerConfigs{
-		Addr: &addr.Addr{},
+		Addr: addr.Addr{},
 	}
 }
 
 func (o *ServerConfigs) ParseFlags() {
 	if err := env.Parse(o); err != nil {
-		panic(err)
+		fmt.Println("ENV var not found")
 	}
-	flag.Var(o.Addr, "a", "Host and port for connect/create")
+	flag.Var(&o.Addr, "a", "Host and port for connect/create")
 	flag.Parse()
 }
