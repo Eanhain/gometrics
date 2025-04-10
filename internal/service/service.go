@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type Storage interface {
+type storage interface {
 	GaugeInsert(key string, value float64) int
 	CounterInsert(key string, value int) int
 	GetGauge(key string) (float64, error)
@@ -15,10 +15,10 @@ type Storage interface {
 }
 
 type Service struct {
-	store *Storage
+	store *storage
 }
 
-func NewService(inst Storage) *Service {
+func NewService(inst storage) *Service {
 	return &Service{store: &inst}
 }
 

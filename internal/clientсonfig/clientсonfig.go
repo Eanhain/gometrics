@@ -1,4 +1,4 @@
-package clientflags
+package clientсonfig
 
 import (
 	"flag"

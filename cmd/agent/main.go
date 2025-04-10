@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gometrics/internal/clientflags"
+	"gometrics/internal/clientconfig"
 	"gometrics/internal/runtimemetrics"
 	"gometrics/internal/service"
 	"gometrics/internal/storage"
@@ -41,7 +41,7 @@ func main() {
 
 	newService := service.NewService(storage.NewMemStorage())
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newService)
-	f := clientflags.InitialFlags()
+	f := clientconfig.InitialFlags()
 	f.ParseFlags()
 
 	var wg sync.WaitGroup

@@ -2,7 +2,7 @@ package main
 
 import (
 	"gometrics/internal/handlers"
-	"gometrics/internal/serverflags"
+	"gometrics/internal/serverconfig"
 	"gometrics/internal/service"
 	"gometrics/internal/storage"
 	"net/http"
@@ -11,7 +11,7 @@ import (
 func main() {
 	newStorage := storage.NewMemStorage()
 	newHandler := handlers.NewHandlerService(service.NewService(newStorage))
-	f := serverflags.InitialFlags()
+	f := serverconfig.InitialFlags()
 	f.ParseFlags()
 
 	newHandler.CreateHandlers()

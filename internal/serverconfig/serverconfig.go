@@ -1,4 +1,4 @@
-package serverflags
+package serverconfig
 
 import (
 	"flag"
