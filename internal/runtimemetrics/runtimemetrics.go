@@ -23,7 +23,6 @@ type serviceInt interface {
 	GetUpdateUrls(host string, port string) []string
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
-	GetAllMetrics() map[string]string
 }
 
 func NewRuntimeUpdater(service serviceInt) *runtimeUpdate {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -32,15 +33,19 @@ func (s *Service) GetCounter(key string) (int, error) {
 	return (*s.store).GetCounter(key)
 }
 
-func (s *Service) GetAllMetrics() map[string]string {
+func (s *Service) GetAllMetrics() ([]string, map[string]string) {
 	result := make(map[string]string)
+	keys := make([]string, 0, len(result))
 	for key, gauge := range (*s.store).GetGaugeMap() {
 		result[key] = fmt.Sprintf("%v", gauge)
+		keys = append(keys, key)
 	}
 	for key, counter := range (*s.store).GetCounterMap() {
 		result[key] = fmt.Sprintf("%v", counter)
+		keys = append(keys, key)
 	}
-	return result
+	sort.Strings(keys)
+	return keys, result
 }
 
 func (s *Service) GaugeInsert(key string, value float64) int {

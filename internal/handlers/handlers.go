@@ -18,7 +18,7 @@ type serviceInt interface {
 	CounterInsert(key string, value int) int
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
-	GetAllMetrics() map[string]string
+	GetAllMetrics() ([]string, map[string]string)
 }
 
 func NewHandlerService(service serviceInt) *handlerService {
@@ -41,11 +41,11 @@ func (h *handlerService) CreateHandlers() {
 }
 
 func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
-	metrics := h.service.GetAllMetrics()
+	keys, metrics := h.service.GetAllMetrics()
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	format := "%s: %s<br>"
-	for key, value := range metrics {
-		_, err := fmt.Fprintf(res, format, key, value)
+	for _, key := range keys {
+		_, err := fmt.Fprintf(res, format, key, metrics[key])
 		if err != nil {
 			panic(err)
 		}
