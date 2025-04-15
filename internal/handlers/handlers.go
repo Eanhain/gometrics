@@ -58,9 +58,11 @@ func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Reque
 	for _, key := range keys {
 		_, err := fmt.Fprintf(res, format, key, metrics[key])
 		if err != nil {
+			http.Error(res, "cannot parse metric", http.StatusBadRequest)
 			panic(err)
 		}
 	}
+	res.WriteHeader(http.StatusOK)
 }
 
 func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) {
@@ -76,8 +78,10 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 		}
 		_, err = fmt.Fprintf(res, format, value)
 		if err != nil {
+			http.Error(res, "cannot parse metric", http.StatusBadRequest)
 			panic(err)
 		}
+		res.WriteHeader(http.StatusOK)
 	case "counter":
 		value, err := h.service.GetCounter(nameMetric)
 		if err != nil {
@@ -88,6 +92,7 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 		if err != nil {
 			panic(err)
 		}
+		res.WriteHeader(http.StatusOK)
 	default:
 		http.Error(res, "invalid metric type", http.StatusBadRequest)
 		return
