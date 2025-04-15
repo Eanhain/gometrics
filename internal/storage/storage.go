@@ -60,11 +60,19 @@ func (storage *MemStorage) CounterInsert(key string, value int) int {
 func (storage *MemStorage) GetGaugeMap() map[string]float64 {
 	storage.mu.RLock()
 	defer storage.mu.RUnlock()
-	return storage.gauge
+	copyMap := make(map[string]float64, len(storage.gauge))
+	for k, v := range storage.gauge {
+		copyMap[k] = v
+	}
+	return copyMap
 }
 
 func (storage *MemStorage) GetCounterMap() map[string]int {
 	storage.mu.RLock()
 	defer storage.mu.RUnlock()
-	return storage.counter
+	copyMap := make(map[string]int, len(storage.counter))
+	for k, v := range storage.counter {
+		copyMap[k] = v
+	}
+	return copyMap
 }

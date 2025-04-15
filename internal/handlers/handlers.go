@@ -11,6 +11,7 @@ import (
 type handlerService struct {
 	service serviceInt
 	router  *chi.Mux
+	logger  loggerServer
 }
 
 type serviceInt interface {
@@ -18,14 +19,24 @@ type serviceInt interface {
 	CounterInsert(key string, value int) int
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
-	GetAllMetrics() map[string]string
+	GetAllMetrics() ([]string, map[string]string)
 }
 
-func NewHandlerService(service serviceInt) *handlerService {
+type loggerServer interface {
+	WithLogging(h http.HandlerFunc) http.HandlerFunc
+	Sync() error
+}
+
+func NewHandlerService(service serviceInt, logger loggerServer) *handlerService {
 	return &handlerService{
 		service: service,
 		router:  chi.NewRouter(),
+		logger:  logger,
 	}
+}
+
+func (h *handlerService) SyncLogger() error {
+	return h.logger.Sync()
 }
 
 func (h *handlerService) GetRouter() *chi.Mux {
@@ -34,22 +45,24 @@ func (h *handlerService) GetRouter() *chi.Mux {
 
 func (h *handlerService) CreateHandlers() {
 	h.router.Group(func(r chi.Router) {
-		r.Get("/", h.showAllMetrics)
-		r.Post("/update/{type}/{name}/{value}", h.UpdateMetrics)
-		r.Get("/value/{type}/{name}", h.GetMetrics)
+		r.Get("/", h.logger.WithLogging(http.HandlerFunc(h.showAllMetrics)))
+		r.Post("/update/{type}/{name}/{value}", h.logger.WithLogging(http.HandlerFunc(h.UpdateMetrics)))
+		r.Get("/value/{type}/{name}", h.logger.WithLogging(http.HandlerFunc(h.GetMetrics)))
 	})
 }
 
 func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
-	metrics := h.service.GetAllMetrics()
+	keys, metrics := h.service.GetAllMetrics()
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	format := "%s: %s<br>"
-	for key, value := range metrics {
-		_, err := fmt.Fprintf(res, format, key, value)
+	for _, key := range keys {
+		_, err := fmt.Fprintf(res, format, key, metrics[key])
 		if err != nil {
+			http.Error(res, "cannot parse metric", http.StatusBadRequest)
 			panic(err)
 		}
 	}
+	res.WriteHeader(http.StatusOK)
 }
 
 func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) {
@@ -65,8 +78,10 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 		}
 		_, err = fmt.Fprintf(res, format, value)
 		if err != nil {
+			http.Error(res, "cannot parse metric", http.StatusBadRequest)
 			panic(err)
 		}
+		res.WriteHeader(http.StatusOK)
 	case "counter":
 		value, err := h.service.GetCounter(nameMetric)
 		if err != nil {
@@ -77,6 +92,7 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 		if err != nil {
 			panic(err)
 		}
+		res.WriteHeader(http.StatusOK)
 	default:
 		http.Error(res, "invalid metric type", http.StatusBadRequest)
 		return
