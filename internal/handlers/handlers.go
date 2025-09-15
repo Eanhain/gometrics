@@ -45,11 +45,11 @@ func (h *handlerService) GetRouter() *chi.Mux {
 
 func (h *handlerService) CreateHandlers() {
 	h.router.Group(func(r chi.Router) {
-		r.Get("/", h.logger.WithLogging(http.HandlerFunc(h.showAllMetrics)))
+		// r.Get("/", h.logger.WithLogging(http.HandlerFunc(h.showAllMetrics)))
 		r.Post("/update", h.logger.WithLogging(http.HandlerFunc(h.PostJSON)))
 		r.Post("/value", h.logger.WithLogging(http.HandlerFunc(h.GetJSON)))
-		r.Post("/update/{type}/{name}/{value}", h.logger.WithLogging(http.HandlerFunc(h.UpdateMetrics)))
-		r.Get("/value/{type}/{name}", h.logger.WithLogging(http.HandlerFunc(h.GetMetrics)))
+		// r.Post("/update/{type}/{name}/{value}", h.logger.WithLogging(http.HandlerFunc(h.UpdateMetrics)))
+		// r.Get("/value/{type}/{name}", h.logger.WithLogging(http.HandlerFunc(h.GetMetrics)))
 	})
 }
 
