@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"io"
 	"net/http"
 
 	easyjson "github.com/mailru/easyjson"
@@ -13,10 +12,6 @@ type Metrics struct {
 	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
 	Delta *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
 	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
-}
-
-func (h *handlerService) readJSON(body io.ReadCloser) {
-
 }
 
 func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
@@ -36,12 +31,21 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	switch metric.MType {
 	case "gauge":
 		res.WriteHeader(h.service.GaugeInsert(metric.ID, *metric.Value))
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusBadRequest)
+			return
+		}
 	case "counter":
 		res.WriteHeader(h.service.CounterInsert(metric.ID, int(*metric.Delta)))
 	default:
 		http.Error(res, "invalid action type", http.StatusBadRequest)
 		return
 	}
+	out, err := easyjson.Marshal(metric)
+	if err != nil {
+		http.Error(res, "cannot marshal metric", http.StatusBadRequest)
+	}
+	res.Write(out)
 }
 
 func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
@@ -78,5 +82,10 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, "invalid action type", http.StatusBadRequest)
 		return
 	}
+	out, err := easyjson.Marshal(metric)
+	if err != nil {
+		http.Error(res, "cannot marshal metric", http.StatusBadRequest)
+	}
+	res.Write(out)
 
 }
