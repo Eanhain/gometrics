@@ -19,7 +19,7 @@ type serviceInt interface {
 	CounterInsert(key string, value int) int
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
-	GetAllMetrics() ([]string, map[string]string)
+	GetAllMetrics() ([]string, []string, map[string]string)
 }
 
 type loggerServer interface {
@@ -45,16 +45,17 @@ func (h *handlerService) GetRouter() *chi.Mux {
 
 func (h *handlerService) CreateHandlers() {
 	h.router.Group(func(r chi.Router) {
-		// r.Get("/", h.logger.WithLogging(http.HandlerFunc(h.showAllMetrics)))
-		r.Post("/update", h.logger.WithLogging(http.HandlerFunc(h.PostJSON)))
-		r.Post("/value", h.logger.WithLogging(http.HandlerFunc(h.GetJSON)))
-		// r.Post("/update/{type}/{name}/{value}", h.logger.WithLogging(http.HandlerFunc(h.UpdateMetrics)))
-		// r.Get("/value/{type}/{name}", h.logger.WithLogging(http.HandlerFunc(h.GetMetrics)))
+		r.Get("/", h.logger.WithLogging(http.HandlerFunc(h.showAllMetrics)))
+		r.Post("/update/", h.logger.WithLogging(http.HandlerFunc(h.PostJSON)))
+		r.Post("/value/", h.logger.WithLogging(http.HandlerFunc(h.GetJSON)))
+		r.Post("/update/{type}/{name}/{value}", h.logger.WithLogging(http.HandlerFunc(h.UpdateMetrics)))
+		r.Get("/value/{type}/{name}", h.logger.WithLogging(http.HandlerFunc(h.GetMetrics)))
 	})
 }
 
 func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
-	keys, metrics := h.service.GetAllMetrics()
+	keysGauge, keysCounter, metrics := h.service.GetAllMetrics()
+	keys := append(keysGauge, keysCounter...)
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	format := "%s: %s<br>"
 	for _, key := range keys {

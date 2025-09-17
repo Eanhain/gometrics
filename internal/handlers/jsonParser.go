@@ -4,18 +4,13 @@ import (
 	"bytes"
 	"net/http"
 
+	metricsdto "gometrics/internal/api/metricsdto"
+
 	easyjson "github.com/mailru/easyjson"
 )
 
-type Metrics struct {
-	ID    string   `json:"id"`              // имя метрики
-	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
-	Delta *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
-	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
-}
-
 func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
-	var metric Metrics
+	var metric metricsdto.Metrics
 	var buf bytes.Buffer
 	// читаем тело запроса
 	_, err := buf.ReadFrom(req.Body)
@@ -31,10 +26,6 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	switch metric.MType {
 	case "gauge":
 		res.WriteHeader(h.service.GaugeInsert(metric.ID, *metric.Value))
-		if err != nil {
-			http.Error(res, err.Error(), http.StatusBadRequest)
-			return
-		}
 	case "counter":
 		res.WriteHeader(h.service.CounterInsert(metric.ID, int(*metric.Delta)))
 	default:
@@ -49,7 +40,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 }
 
 func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
-	var metric Metrics
+	var metric metricsdto.Metrics
 	var buf bytes.Buffer
 	// читаем тело запроса
 	_, err := buf.ReadFrom(req.Body)

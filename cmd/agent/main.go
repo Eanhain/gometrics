@@ -54,7 +54,10 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		metricsGen.SendMetrics(f.GetHost(), f.GetPort(), f.ReportInterval)
+		err := metricsGen.SendMetrics(f.GetHost(), f.GetPort(), f.ReportInterval)
+		if err != nil {
+			panic(err)
+		}
 	}()
 
 	wg.Wait()

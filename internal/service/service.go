@@ -33,19 +33,37 @@ func (s *Service) GetCounter(key string) (int, error) {
 	return (*s.store).GetCounter(key)
 }
 
-func (s *Service) GetAllMetrics() ([]string, map[string]string) {
+func (s *Service) GetAllMetrics() ([]string, []string, map[string]string) {
 	result := make(map[string]string)
-	keys := make([]string, 0, len(result))
+
+	gaugeKeys := make([]string, 0, len(result))
+	counterKeys := make([]string, 0, len(result))
+
 	for key, gauge := range (*s.store).GetGaugeMap() {
 		result[key] = fmt.Sprintf("%v", gauge)
-		keys = append(keys, key)
+		gaugeKeys = append(gaugeKeys, key)
 	}
+
+	sort.Strings(gaugeKeys)
+
 	for key, counter := range (*s.store).GetCounterMap() {
 		result[key] = fmt.Sprintf("%v", counter)
-		keys = append(keys, key)
+		counterKeys = append(counterKeys, key)
 	}
-	sort.Strings(keys)
-	return keys, result
+
+	sort.Strings(counterKeys)
+
+	return gaugeKeys, counterKeys, result
+}
+
+func (s *Service) GetAllGauges() map[string]float64 {
+	gaugeMap := (*s.store).GetGaugeMap()
+	return gaugeMap
+}
+
+func (s *Service) GetAllCounters() map[string]int {
+	gaugeMap := (*s.store).GetCounterMap()
+	return gaugeMap
 }
 
 func (s *Service) GaugeInsert(key string, value float64) int {
@@ -56,19 +74,4 @@ func (s *Service) GaugeInsert(key string, value float64) int {
 func (s *Service) CounterInsert(key string, value int) int {
 	key = strings.ToLower(key)
 	return (*s.store).CounterInsert(key, value)
-}
-
-func (s *Service) GetUpdateUrls(host string, port string) []string {
-	urls := []string{}
-	gaugeMap := (*s.store).GetGaugeMap()
-	counterMap := (*s.store).GetCounterMap()
-	for key, value := range gaugeMap {
-		url := fmt.Sprintf("http://%s%s/update/gauge/%s/%v", host, port, key, value)
-		urls = append(urls, url)
-	}
-	for key, value := range counterMap {
-		url := fmt.Sprintf("http://%s%s/update/counter/%s/%v", host, port, key, value)
-		urls = append(urls, url)
-	}
-	return urls
 }

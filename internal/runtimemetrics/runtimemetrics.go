@@ -5,10 +5,15 @@ import (
 	"math/rand/v2"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
+
+	metricsdto "gometrics/internal/api/metricsdto"
+
+	easyjson "github.com/mailru/easyjson"
 )
 
 type runtimeUpdate struct {
@@ -20,7 +25,7 @@ type runtimeUpdate struct {
 type serviceInt interface {
 	GaugeInsert(key string, value float64) int
 	CounterInsert(key string, value int) int
-	GetUpdateUrls(host string, port string) []string
+	GetAllMetrics() ([]string, []string, map[string]string)
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
 }
@@ -69,18 +74,53 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 	return nil
 }
 
-func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
+func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) error {
 	sendTimeDuration := time.Duration(sendTime)
+	curl := fmt.Sprintf("http://%v%v/update/", host, port)
 	for {
-		urls := ru.service.GetUpdateUrls(host, port)
-		for _, url := range urls {
-			_, err := ru.client.R().
-				SetHeader("Content-Type", "text/plain").
-				Post(url)
+		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics()
+		for _, key := range keysGauge {
+
+			valueString := metricMaps[key]
+			valueFloat, err := strconv.ParseFloat(valueString, 64)
+
 			if err != nil {
-				fmt.Printf("Can't send metric %v\n", url)
-				break
+				return err
 			}
+			metrics := metricsdto.Metrics{ID: key, MType: "gauge", Value: &valueFloat}
+			buf, err := easyjson.Marshal(metrics)
+			if err != nil {
+				return err
+			}
+			_, err = ru.client.R().
+				SetHeader("Content-Type", "application/json").
+				SetBody(buf).
+				Post(curl)
+			if err != nil {
+				return err
+			}
+		}
+
+		for _, key := range keysCounter {
+			value := metricMaps[key]
+			valueInt, err := strconv.Atoi(value)
+			int64Value := int64(valueInt)
+			if err != nil {
+				return err
+			}
+			metrics := metricsdto.Metrics{ID: key, MType: "counter", Delta: &int64Value}
+			buf, err := easyjson.Marshal(metrics)
+			if err != nil {
+				return err
+			}
+			_, err = ru.client.R().
+				SetHeader("Content-Type", "application/json").
+				SetBody(buf).
+				Post(curl)
+			if err != nil {
+				return err
+			}
+
 		}
 		time.Sleep(sendTimeDuration * time.Second)
 	}
