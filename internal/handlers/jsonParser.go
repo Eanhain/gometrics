@@ -12,6 +12,8 @@ import (
 func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	var metric metricsdto.Metrics
 	var buf bytes.Buffer
+
+	res.Header().Set("Content-Type", "application/json")
 	// читаем тело запроса
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
@@ -40,6 +42,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 }
 
 func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("Content-Type", "application/json")
 	var metric metricsdto.Metrics
 	var buf bytes.Buffer
 	// читаем тело запроса
