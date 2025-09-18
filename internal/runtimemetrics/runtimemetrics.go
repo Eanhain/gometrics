@@ -97,7 +97,7 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) err
 				SetBody(buf).
 				Post(curl)
 			if err != nil {
-				return err
+				fmt.Println("Can't connect to metrics server")
 			}
 		}
 
@@ -118,7 +118,7 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) err
 				SetBody(buf).
 				Post(curl)
 			if err != nil {
-				return err
+				fmt.Println("Can't connect to metrics server")
 			}
 
 		}
