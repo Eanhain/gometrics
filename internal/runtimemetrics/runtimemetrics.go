@@ -13,6 +13,8 @@ import (
 
 	metricsdto "gometrics/internal/api/metricsdto"
 
+	myCompress "gometrics/internal/compress"
+
 	easyjson "github.com/mailru/easyjson"
 )
 
@@ -74,10 +76,14 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 	return nil
 }
 
-func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) error {
+func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, compress string) error {
 	sendTimeDuration := time.Duration(sendTime)
+	var bufOut []byte
 	curl := fmt.Sprintf("http://%v%v/update/", host, port)
+
 	for {
+		req := ru.client.R().
+			SetHeader("Content-Type", "application/json")
 		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics()
 		for _, key := range keysGauge {
 
@@ -88,13 +94,27 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) err
 				return err
 			}
 			metrics := metricsdto.Metrics{ID: key, MType: "gauge", Value: &valueFloat}
-			buf, err := easyjson.Marshal(metrics)
+			bufTemp, err := easyjson.Marshal(metrics)
 			if err != nil {
 				return err
 			}
+
+			switch compress {
+			case "gzip":
+				bufOut, err = myCompress.Compress(bufTemp)
+				if err != nil {
+					return err
+				}
+				req.SetHeader("Accept-Encoding", "gzip").
+					SetHeader("Content-Encoding", "gzip")
+			case "false":
+				bufOut = bufTemp
+			default:
+				bufOut = bufTemp
+			}
 			_, err = ru.client.R().
 				SetHeader("Content-Type", "application/json").
-				SetBody(buf).
+				SetBody(bufOut).
 				Post(curl)
 			if err != nil {
 				fmt.Println("Can't connect to metrics server")
@@ -109,13 +129,26 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) err
 				return err
 			}
 			metrics := metricsdto.Metrics{ID: key, MType: "counter", Delta: &int64Value}
-			buf, err := easyjson.Marshal(metrics)
+			bufTemp, err := easyjson.Marshal(metrics)
 			if err != nil {
 				return err
 			}
+			switch compress {
+			case "gzip":
+				bufOut, err = myCompress.Compress(bufTemp)
+				if err != nil {
+					return err
+				}
+				req.SetHeader("Accept-Encoding", "gzip").
+					SetHeader("Content-Encoding", "gzip")
+			case "false":
+				bufOut = bufTemp
+			default:
+				bufOut = bufTemp
+			}
 			_, err = ru.client.R().
 				SetHeader("Content-Type", "application/json").
-				SetBody(buf).
+				SetBody(bufOut).
 				Post(curl)
 			if err != nil {
 				fmt.Println("Can't connect to metrics server")

@@ -21,11 +21,6 @@ type serviceInt interface {
 	GetAllMetrics() ([]string, []string, map[string]string)
 }
 
-type loggerServer interface {
-	WithLogging(h http.Handler) http.Handler
-	Sync() error
-}
-
 func NewHandlerService(service serviceInt, router *chi.Mux) *handlerService {
 	return &handlerService{
 		service: service,
@@ -40,10 +35,10 @@ func (h *handlerService) GetRouter() *chi.Mux {
 func (h *handlerService) CreateHandlers() {
 	h.router.Group(func(r chi.Router) {
 		r.Get("/", h.showAllMetrics)
+		r.Get("/value/{type}/{name}", h.GetMetrics)
 		r.Post("/update/", h.PostJSON)
 		r.Post("/value/", h.GetJSON)
 		r.Post("/update/{type}/{name}/{value}", h.UpdateMetrics)
-		r.Get("/value/{type}/{name}", h.GetMetrics)
 	})
 }
 

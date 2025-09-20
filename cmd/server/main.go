@@ -1,6 +1,7 @@
 package main
 
 import (
+	myCompress "gometrics/internal/compress"
 	"gometrics/internal/handlers"
 	"gometrics/internal/logger"
 	"gometrics/internal/serverconfig"
@@ -9,12 +10,15 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
 	newStorage := storage.NewMemStorage()
 	newLogger := logger.CreateLoggerRequest()
 	newMux := chi.NewMux()
+	newMux.Use(myCompress.GzipHandleReader)
+	newMux.Use(middleware.Compress(5, "gzip"))
 	newMux.Use(newLogger.WithLogging)
 	newHandler := handlers.NewHandlerService(service.NewService(newStorage), newMux)
 	defer newLogger.Sync()

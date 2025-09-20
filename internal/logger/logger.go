@@ -59,7 +59,6 @@ func (l *LoggerRequest) WithLogging(h http.Handler) http.Handler {
 		h.ServeHTTP(&lw, r)
 
 		duration := time.Since(start)
-
 		l.Infoln(
 			"uri", r.RequestURI,
 			"method", r.Method,
