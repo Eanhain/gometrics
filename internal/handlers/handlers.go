@@ -11,7 +11,6 @@ import (
 type handlerService struct {
 	service serviceInt
 	router  *chi.Mux
-	logger  loggerServer
 }
 
 type serviceInt interface {
@@ -23,20 +22,15 @@ type serviceInt interface {
 }
 
 type loggerServer interface {
-	WithLogging(h http.HandlerFunc) http.HandlerFunc
+	WithLogging(h http.Handler) http.Handler
 	Sync() error
 }
 
-func NewHandlerService(service serviceInt, logger loggerServer) *handlerService {
+func NewHandlerService(service serviceInt, router *chi.Mux) *handlerService {
 	return &handlerService{
 		service: service,
-		router:  chi.NewRouter(),
-		logger:  logger,
+		router:  router,
 	}
-}
-
-func (h *handlerService) SyncLogger() error {
-	return h.logger.Sync()
 }
 
 func (h *handlerService) GetRouter() *chi.Mux {
@@ -45,11 +39,11 @@ func (h *handlerService) GetRouter() *chi.Mux {
 
 func (h *handlerService) CreateHandlers() {
 	h.router.Group(func(r chi.Router) {
-		r.Get("/", h.logger.WithLogging(http.HandlerFunc(h.showAllMetrics)))
-		r.Post("/update/", h.logger.WithLogging(http.HandlerFunc(h.PostJSON)))
-		r.Post("/value/", h.logger.WithLogging(http.HandlerFunc(h.GetJSON)))
-		r.Post("/update/{type}/{name}/{value}", h.logger.WithLogging(http.HandlerFunc(h.UpdateMetrics)))
-		r.Get("/value/{type}/{name}", h.logger.WithLogging(http.HandlerFunc(h.GetMetrics)))
+		r.Get("/", h.showAllMetrics)
+		r.Post("/update/", h.PostJSON)
+		r.Post("/value/", h.GetJSON)
+		r.Post("/update/{type}/{name}/{value}", h.UpdateMetrics)
+		r.Get("/value/{type}/{name}", h.GetMetrics)
 	})
 }
 

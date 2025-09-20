@@ -7,13 +7,17 @@ import (
 	"gometrics/internal/service"
 	"gometrics/internal/storage"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func main() {
 	newStorage := storage.NewMemStorage()
 	newLogger := logger.CreateLoggerRequest()
-	newHandler := handlers.NewHandlerService(service.NewService(newStorage), newLogger)
-	defer newHandler.SyncLogger()
+	newMux := chi.NewMux()
+	newMux.Use(newLogger.WithLogging)
+	newHandler := handlers.NewHandlerService(service.NewService(newStorage), newMux)
+	defer newLogger.Sync()
 	f := serverconfig.InitialFlags()
 	f.ParseFlags()
 	newHandler.CreateHandlers()

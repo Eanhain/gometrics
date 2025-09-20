@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	dto "gometrics/internal/api/metricsdto"
-	"gometrics/internal/logger"
 	"gometrics/internal/service"
 	"gometrics/internal/storage"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	easyjson "github.com/mailru/easyjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,7 +106,7 @@ func Test_handlerService_CreateHandlers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage()), logger.CreateLoggerRequest())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage()), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
@@ -188,7 +188,7 @@ func Test_handlerService_JsonInsert(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage()), logger.CreateLoggerRequest())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage()), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
@@ -284,7 +284,7 @@ func Test_handlerService_JsonGet(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage()), logger.CreateLoggerRequest())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage()), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
