@@ -10,7 +10,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
@@ -19,7 +18,7 @@ func main() {
 	newMux := chi.NewMux()
 	newMux.Use(newLogger.WithLogging)
 	newMux.Use(myCompress.GzipHandleReader)
-	newMux.Use(middleware.Compress(5, "gzip"))
+	newMux.Use(myCompress.GzipHandleWriter)
 	newHandler := handlers.NewHandlerService(service.NewService(newStorage), newMux)
 	defer newLogger.Sync()
 	f := serverconfig.InitialFlags()
