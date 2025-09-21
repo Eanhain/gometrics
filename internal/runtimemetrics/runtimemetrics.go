@@ -105,15 +105,15 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, com
 				if err != nil {
 					return err
 				}
-				req.SetHeader("Accept-Encoding", "gzip").
+				req.
+					SetHeader("Accept-Encoding", "gzip").
 					SetHeader("Content-Encoding", "gzip")
 			case "false":
 				bufOut = bufTemp
 			default:
 				bufOut = bufTemp
 			}
-			_, err = ru.client.R().
-				SetHeader("Content-Type", "application/json").
+			_, err = req.
 				SetBody(bufOut).
 				Post(curl)
 			if err != nil {
@@ -146,8 +146,7 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, com
 			default:
 				bufOut = bufTemp
 			}
-			_, err = ru.client.R().
-				SetHeader("Content-Type", "application/json").
+			_, err = req.
 				SetBody(bufOut).
 				Post(curl)
 			if err != nil {
