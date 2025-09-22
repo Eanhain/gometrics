@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	myCompress "gometrics/internal/compress"
 	"gometrics/internal/handlers"
 	"gometrics/internal/logger"
@@ -17,15 +16,25 @@ import (
 func main() {
 	f := serverconfig.InitialFlags()
 	f.ParseFlags()
-	file := persist.NewPersistStorage(f.FilePath, f.Restore, f.StoreInter)
-	fmt.Println(file)
+
+	pstore := persist.NewPersistStorage(f.FilePath)
+
 	newStorage := storage.NewMemStorage()
 	newLogger := logger.CreateLoggerRequest()
+
 	newMux := chi.NewMux()
 	newMux.Use(newLogger.WithLogging)
 	newMux.Use(myCompress.GzipHandleReader)
 	newMux.Use(myCompress.GzipHandleWriter)
-	newHandler := handlers.NewHandlerService(service.NewService(newStorage), newMux)
+
+	newService := service.NewService(newStorage, pstore)
+
+	newHandler := handlers.NewHandlerService(newService, newMux)
+
+	if f.Restore {
+		newService.PersistRestore()
+	}
+
 	defer newLogger.Sync()
 	newHandler.CreateHandlers()
 	r := newHandler.GetRouter()

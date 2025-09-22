@@ -14,8 +14,8 @@ type handlerService struct {
 }
 
 type serviceInt interface {
-	GaugeInsert(key string, value float64) int
-	CounterInsert(key string, value int) int
+	GaugeInsert(key string, value float64) error
+	CounterInsert(key string, value int) error
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
 	GetAllMetrics() ([]string, []string, map[string]string)
@@ -102,14 +102,24 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 			http.Error(res, "could not parse gaude metric", http.StatusBadRequest)
 			return
 		}
-		res.WriteHeader(h.service.GaugeInsert(nameMetric, value))
+		err = h.service.GaugeInsert(nameMetric, value)
+		if err != nil {
+			http.Error(res, "could not insert gauge metric", http.StatusBadRequest)
+			return
+		}
+		res.WriteHeader(http.StatusOK)
 	case "counter":
 		value, err := strconv.Atoi(valueMetric)
 		if err != nil {
 			http.Error(res, "could not parse counter metric", http.StatusBadRequest)
 			return
 		}
-		res.WriteHeader(h.service.CounterInsert(nameMetric, value))
+		err = h.service.CounterInsert(nameMetric, value)
+		if err != nil {
+			http.Error(res, "could not insert counter metric", http.StatusBadRequest)
+			return
+		}
+		res.WriteHeader(http.StatusOK)
 	default:
 		http.Error(res, "invalid action type", http.StatusBadRequest)
 		return

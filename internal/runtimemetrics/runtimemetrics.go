@@ -25,8 +25,8 @@ type runtimeUpdate struct {
 }
 
 type serviceInt interface {
-	GaugeInsert(key string, value float64) int
-	CounterInsert(key string, value int) int
+	GaugeInsert(key string, value float64) error
+	CounterInsert(key string, value int) error
 	GetAllMetrics() ([]string, []string, map[string]string)
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
@@ -71,7 +71,10 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 		if err != nil {
 			return err
 		}
-		ru.service.GaugeInsert(strings.ToLower(metricName), value)
+		err = ru.service.GaugeInsert(strings.ToLower(metricName), value)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -166,8 +169,14 @@ func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) {
 		if err != nil {
 			panic(err)
 		}
-		ru.service.CounterInsert("PollCount", 1)
-		ru.service.GaugeInsert("RandomValue", rand.Float64())
+		err = ru.service.CounterInsert("PollCount", 1)
+		if err != nil {
+			panic(err)
+		}
+		err = ru.service.GaugeInsert("RandomValue", rand.Float64())
+		if err != nil {
+			panic(err)
+		}
 		time.Sleep(refreshTimeDuration * time.Second)
 	}
 }

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"errors"
-	"net/http"
 	"sync"
 )
 
@@ -41,20 +40,20 @@ func (storage *MemStorage) GetCounter(key string) (int, error) {
 	return val, ErrNotFound
 }
 
-func (storage *MemStorage) GaugeInsert(key string, value float64) int {
+func (storage *MemStorage) GaugeInsert(key string, value float64) error {
 	storage.mu.Lock()
 	defer storage.mu.Unlock()
 	storage.gauge[key] = value
-	return http.StatusOK
+	return nil
 }
 
-func (storage *MemStorage) CounterInsert(key string, value int) int {
+func (storage *MemStorage) CounterInsert(key string, value int) error {
 
 	storage.mu.Lock()
 	defer storage.mu.Unlock()
 
 	storage.counter[key] += value
-	return http.StatusOK
+	return nil
 }
 
 func (storage *MemStorage) GetGaugeMap() map[string]float64 {
@@ -75,4 +74,12 @@ func (storage *MemStorage) GetCounterMap() map[string]int {
 		copyMap[k] = v
 	}
 	return copyMap
+}
+
+func (storage *MemStorage) ClearStorage() error {
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+	storage.gauge = make(map[string]float64)
+	storage.counter = make(map[string]int)
+	return nil
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"gometrics/internal/clientconfig"
+	"gometrics/internal/persist"
 	"gometrics/internal/runtimemetrics"
 	"gometrics/internal/service"
 	"gometrics/internal/storage"
@@ -38,8 +39,8 @@ func main() {
 		"Sys",
 		"TotalAlloc",
 	}
-
-	newService := service.NewService(storage.NewMemStorage())
+	agentPersist := persist.NewPersistStorage("agent")
+	newService := service.NewService(storage.NewMemStorage(), agentPersist)
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newService)
 	f := clientconfig.InitialFlags()
 	f.ParseFlags()

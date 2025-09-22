@@ -27,9 +27,19 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	}
 	switch metric.MType {
 	case "gauge":
-		res.WriteHeader(h.service.GaugeInsert(metric.ID, *metric.Value))
+		err = h.service.GaugeInsert(metric.ID, *metric.Value)
+		if err != nil {
+			http.Error(res, "could not insert gauge metric", http.StatusBadRequest)
+			return
+		}
+		res.WriteHeader(http.StatusOK)
 	case "counter":
-		res.WriteHeader(h.service.CounterInsert(metric.ID, int(*metric.Delta)))
+		err = h.service.CounterInsert(metric.ID, int(*metric.Delta))
+		if err != nil {
+			http.Error(res, "could not insert counter metric", http.StatusBadRequest)
+			return
+		}
+		res.WriteHeader(http.StatusOK)
 	default:
 		http.Error(res, "invalid action type", http.StatusNotFound)
 		return
