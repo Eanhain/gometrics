@@ -2,19 +2,36 @@ package handlers
 
 import (
 	"bytes"
-	dto "gometrics/internal/api/metricsdto"
-	"gometrics/internal/service"
-	"gometrics/internal/storage"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+
+	dto "gometrics/internal/api/metricsdto"
+	"gometrics/internal/service"
+	"gometrics/internal/storage"
 
 	"github.com/go-chi/chi/v5"
 	easyjson "github.com/mailru/easyjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type stubPersistStorage struct{}
+
+func (s *stubPersistStorage) GaugeInsert(string, float64) error { return nil }
+func (s *stubPersistStorage) CounterInsert(string, int) error   { return nil }
+func (s *stubPersistStorage) FormattingLogs(map[string]float64, map[string]int) error {
+	return nil
+}
+func (s *stubPersistStorage) ImportLogs() ([]dto.Metrics, error) {
+	return nil, nil
+}
+func (s *stubPersistStorage) GetFile() *os.File { return nil }
+func (s *stubPersistStorage) GetLoopTime() int  { return 0 }
+func (s *stubPersistStorage) Close() error      { return nil }
+func (s *stubPersistStorage) Flush() error      { return nil }
 
 func testRequest(t *testing.T, ts *httptest.Server, method,
 	path string) (*http.Response, string) {
@@ -106,7 +123,7 @@ func Test_handlerService_CreateHandlers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage()), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
@@ -188,7 +205,7 @@ func Test_handlerService_JsonInsert(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage()), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
@@ -284,7 +301,7 @@ func Test_handlerService_JsonGet(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage()), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()

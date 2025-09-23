@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_memStorage_GaugeInsert(t *testing.T) {
@@ -16,13 +17,13 @@ func Test_memStorage_GaugeInsert(t *testing.T) {
 		name    string
 		storage *MemStorage
 		args    args
-		want    int
+		want    float64
 	}{
 		{
 			name:    "intValueInsert",
 			storage: NewMemStorage(),
 			args:    args{key: "cpu", rawValue: "6"},
-			want:    200,
+			want:    6,
 		},
 	}
 	for _, tt := range tests {
@@ -31,9 +32,11 @@ func Test_memStorage_GaugeInsert(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
-			if got := tt.storage.GaugeInsert(tt.args.key, value); got != tt.want {
-				t.Errorf("memStorage.GaugeInsert() = %v, want %v", got, tt.want)
-			}
+			err = tt.storage.GaugeInsert(tt.args.key, value)
+			require.NoError(t, err)
+			stored, err := tt.storage.GetGauge(tt.args.key)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, stored)
 		})
 	}
 }
@@ -53,7 +56,7 @@ func Test_memStorage_CounterInsert(t *testing.T) {
 			name:    "intValueInsert",
 			storage: NewMemStorage(),
 			args:    args{key: "cpu", rawValue: "6"},
-			want:    200,
+			want:    6,
 		},
 		{
 			name: "appendToMemStorage",
@@ -69,13 +72,11 @@ func Test_memStorage_CounterInsert(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
-			if tt.name == "appendToMemStorage" {
-				tt.storage.CounterInsert(tt.args.key, value)
-				result, _ := tt.storage.GetCounter("cpu")
-				assert.Equal(t, result, tt.want)
-			} else if got := tt.storage.CounterInsert(tt.args.key, value); got != tt.want {
-				t.Errorf("memStorage.CounterInsert() = %v, want %v", got, tt.want)
-			}
+			err = tt.storage.CounterInsert(tt.args.key, value)
+			require.NoError(t, err)
+			result, err := tt.storage.GetCounter(tt.args.key)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, result)
 		})
 	}
 }
