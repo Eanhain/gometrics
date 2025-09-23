@@ -12,7 +12,7 @@ type ServerConfigs struct {
 	Addr       addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
 	StoreInter int       `env:"STORE_INTERVAL" envDefault:"300"`
 	FilePath   string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"`
-	Restore    bool      `env:"RESTORE" envDefault:"true"`
+	Restore    bool      `env:"RESTORE" envDefault:"false"`
 }
 
 func (o *ServerConfigs) GetPort() string {
