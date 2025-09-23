@@ -57,6 +57,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, "cannot marshal metric", http.StatusNotFound)
 	}
 	res.Write(out)
+	res.WriteHeader(http.StatusOK)
 }
 
 func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {

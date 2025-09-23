@@ -51,7 +51,7 @@ func main() {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			newService.LoopFlush()
+			// newService.LoopFlush()
 		}()
 
 		go func() {
