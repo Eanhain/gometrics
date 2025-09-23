@@ -132,15 +132,15 @@ func (s *Service) PersistRestore() error {
 	return nil
 }
 
-func (h *Service) FromStructToStore(metric metricsdto.Metrics) error {
+func (s *Service) FromStructToStore(metric metricsdto.Metrics) error {
 	switch metric.MType {
 	case "gauge":
-		err := h.GaugeInsert(metric.ID, *metric.Value)
+		err := s.GaugeInsert(metric.ID, *metric.Value)
 		if err != nil {
 			return err
 		}
 	case "counter":
-		err := h.CounterInsert(metric.ID, int(*metric.Delta))
+		err := s.CounterInsert(metric.ID, int(*metric.Delta))
 		if err != nil {
 			return err
 		}
@@ -150,16 +150,16 @@ func (h *Service) FromStructToStore(metric metricsdto.Metrics) error {
 	return nil
 }
 
-func (h *Service) StorageCloser() error {
-	return h.pstore.Close()
+func (s *Service) StorageCloser() error {
+	return s.pstore.Close()
 }
 
-func (h *Service) LoopFlush() error {
-	sendTimeDuration := time.Duration(h.pstore.GetLoopTime())
+func (s *Service) LoopFlush() error {
+	sendTimeDuration := time.Duration(s.pstore.GetLoopTime())
 
 	for {
 		time.Sleep(sendTimeDuration * time.Second)
-		err := h.pstore.Flush()
+		err := s.pstore.Flush()
 		if err != nil {
 			return err
 		}
