@@ -3,6 +3,7 @@ package persist
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	metricsdto "gometrics/internal/api/metricsdto"
 	"io"
 	"os"
@@ -85,44 +86,6 @@ func (pstorage *PersistStorage) FormattingLogs(gauge map[string]float64, counter
 	return nil
 }
 
-// func (pstorage *PersistStorage) GaugeInsert(key string, value float64) error {
-// 	metric := metricsdto.Metrics{
-// 		ID:    key,
-// 		MType: "gauge",
-// 		Value: &value}
-// 	pstorage.writeLogs(metric)
-// 	err := pstorage.writeLogs(metric)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if pstorage.storeInter == 0 {
-// 		err := pstorage.Flush()
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
-
-// func (pstorage *PersistStorage) CounterInsert(key string, value int) error {
-// 	value64 := int64(value)
-// 	metric := metricsdto.Metrics{
-// 		ID:    key,
-// 		MType: "counter",
-// 		Delta: &value64}
-// 	err := pstorage.WriteLogs(metric)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if pstorage.storeInter == 0 {
-// 		err := pstorage.Flush()
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
-
 func (pstorage *PersistStorage) Close() error {
 	return pstorage.file.Close()
 }
@@ -152,12 +115,14 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 	jBytes, err := io.ReadAll(pstorage.reader)
 
 	if err != nil {
-		return []metricsdto.Metrics{}, err
+		fmt.Println("can't read metrics to []bytes")
+		return []metricsdto.Metrics{}, nil
 	}
 
 	err = json.Unmarshal(jBytes, &token)
 	if err != nil {
-		return nil, err
+		fmt.Println("can't read metrics file")
+		return []metricsdto.Metrics{}, nil
 	}
 
 	return token, nil

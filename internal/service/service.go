@@ -115,10 +115,10 @@ func (s *Service) CounterInsert(key string, value int) error {
 }
 
 func (s *Service) PersistRestore() error {
-	err := s.store.ClearStorage()
-	if err != nil {
-		return err
-	}
+	// err := s.store.ClearStorage()
+	// if err != nil {
+	// 	return err
+	// }
 	metrics, err := s.pstore.ImportLogs()
 	if err != nil {
 		return err
