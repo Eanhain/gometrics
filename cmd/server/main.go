@@ -39,6 +39,8 @@ func main() {
 
 	newHandler := handlers.NewHandlerService(newService, newMux)
 
+	fmt.Println(f.Restore)
+
 	if f.Restore {
 		err := newService.PersistRestore()
 		if err != nil {
@@ -51,7 +53,7 @@ func main() {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			// newService.LoopFlush()
+			newService.LoopFlush()
 		}()
 
 		go func() {
