@@ -3,8 +3,10 @@ package service
 import (
 	"fmt"
 	"gometrics/internal/api/metricsdto"
+	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 type storage interface {
@@ -18,9 +20,12 @@ type storage interface {
 }
 
 type persistStorage interface {
-	GaugeInsert(key string, value float64) error
-	CounterInsert(key string, value int) error
+	FormattingLogs(map[string]float64, map[string]int) error
 	ImportLogs() ([]metricsdto.Metrics, error)
+	GetFile() *os.File
+	GetLoopTime() int
+	Close() error
+	Flush() error
 }
 
 type Service struct {
@@ -77,12 +82,36 @@ func (s *Service) GetAllCounters() map[string]int {
 
 func (s *Service) GaugeInsert(key string, value float64) error {
 	key = strings.ToLower(key)
-	return s.store.GaugeInsert(key, value)
+	err := s.store.GaugeInsert(key, value)
+	if err != nil {
+		return err
+	}
+	if s.pstore.GetFile() != nil {
+		gauges := s.GetAllGauges()
+		counters := s.GetAllCounters()
+		err := s.pstore.FormattingLogs(gauges, counters)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) CounterInsert(key string, value int) error {
 	key = strings.ToLower(key)
-	return s.store.CounterInsert(key, value)
+	err := s.store.CounterInsert(key, value)
+	if err != nil {
+		return err
+	}
+	if s.pstore.GetFile() != nil {
+		gauges := s.GetAllGauges()
+		counters := s.GetAllCounters()
+		err := s.pstore.FormattingLogs(gauges, counters)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) PersistRestore() error {
@@ -119,4 +148,20 @@ func (h *Service) FromStructToStore(metric metricsdto.Metrics) error {
 		return fmt.Errorf("invalid action type")
 	}
 	return nil
+}
+
+func (h *Service) StorageCloser() error {
+	return h.pstore.Close()
+}
+
+func (h *Service) LoopFlush() error {
+	sendTimeDuration := time.Duration(h.pstore.GetLoopTime())
+
+	for {
+		time.Sleep(sendTimeDuration * time.Second)
+		err := h.pstore.Flush()
+		if err != nil {
+			return err
+		}
+	}
 }

@@ -4,84 +4,174 @@ import (
 	"bufio"
 	"encoding/json"
 	metricsdto "gometrics/internal/api/metricsdto"
+	"io"
 	"os"
+	"path/filepath"
 )
 
 type PersistStorage struct {
-	filePath string
+	file       *os.File
+	writer     *bufio.Writer
+	reader     *bufio.Reader
+	storeInter int
 }
 
-func NewPersistStorage(filePath string) *PersistStorage {
+func NewPersistStorage(dirPath string, storeInter int) (*PersistStorage, error) {
+
+	if dirPath == "agent" {
+		return &PersistStorage{nil, nil, nil, -100}, nil
+	}
+
+	flags := os.O_RDWR | os.O_CREATE
+	mode := os.FileMode(uint32(0755))
+	err := os.MkdirAll(dirPath, mode)
+	if err != nil {
+		return nil, err
+	}
+
+	filePath := filepath.Join(dirPath, "Metrics.json")
+
+	file, err := os.OpenFile(filePath, flags, mode)
+	if err != nil {
+		return nil, err
+	}
 	pstorage := &PersistStorage{
-		filePath: filePath,
+		file:       file,
+		writer:     bufio.NewWriter(file),
+		reader:     bufio.NewReader(file),
+		storeInter: storeInter,
 	}
-	return pstorage
+	return pstorage, nil
 }
 
-func (pstorage *PersistStorage) GaugeInsert(key string, value float64) error {
-	metric := metricsdto.Metrics{
-		ID:    key,
-		MType: "gauge",
-		Value: &value}
-	pstorage.writeLogs(metric)
-	err := pstorage.writeLogs(metric)
-	return err
+func (pstorage *PersistStorage) FormattingLogs(gauge map[string]float64, counter map[string]int) error {
+	var metrics []metricsdto.Metrics
+	for gkey, gvalue := range gauge {
+		metric := metricsdto.Metrics{
+			ID:    gkey,
+			MType: "gauge",
+			Value: &gvalue}
+		metrics = append(metrics, metric)
+	}
+	for ckey, cvalue := range counter {
+		value64 := int64(cvalue)
+		metric := metricsdto.Metrics{
+			ID:    ckey,
+			MType: "counter",
+			Delta: &value64}
+		metrics = append(metrics, metric)
+	}
+	metricsByte, err := json.MarshalIndent(metrics, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := pstorage.file.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := pstorage.file.Seek(0, 0); err != nil {
+		return err
+	}
+	pstorage.writer.Reset(pstorage.file)
+	_, err = pstorage.writer.Write(metricsByte)
+	if err != nil {
+		return err
+	}
+	if pstorage.storeInter == 0 {
+		err := pstorage.Flush()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (pstorage *PersistStorage) CounterInsert(key string, value int) error {
-	value64 := int64(value)
-	metric := metricsdto.Metrics{
-		ID:    key,
-		MType: "counter",
-		Delta: &value64}
-	err := pstorage.writeLogs(metric)
-	return err
+// func (pstorage *PersistStorage) GaugeInsert(key string, value float64) error {
+// 	metric := metricsdto.Metrics{
+// 		ID:    key,
+// 		MType: "gauge",
+// 		Value: &value}
+// 	pstorage.writeLogs(metric)
+// 	err := pstorage.writeLogs(metric)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if pstorage.storeInter == 0 {
+// 		err := pstorage.Flush()
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
+
+// func (pstorage *PersistStorage) CounterInsert(key string, value int) error {
+// 	value64 := int64(value)
+// 	metric := metricsdto.Metrics{
+// 		ID:    key,
+// 		MType: "counter",
+// 		Delta: &value64}
+// 	err := pstorage.WriteLogs(metric)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if pstorage.storeInter == 0 {
+// 		err := pstorage.Flush()
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
+
+func (pstorage *PersistStorage) Close() error {
+	return pstorage.file.Close()
 }
 
-func (pstorage *PersistStorage) writeLogs(logs metricsdto.Metrics) error {
-	flags := os.O_RDWR | os.O_CREATE | os.O_APPEND
-
-	file, err := os.OpenFile(pstorage.filePath, flags, 0644)
+func (pstorage *PersistStorage) WriteLogs(logs []metricsdto.Metrics) error {
+	bytes, err := json.Marshal(logs)
 
 	if err != nil {
 		return err
 	}
 
-	defer file.Close()
-
-	data, err := json.Marshal(logs)
-	if err != nil {
+	if _, err := pstorage.writer.Write(bytes); err != nil {
 		return err
 	}
 
-	_, err = file.Write(data)
+	if err := pstorage.writer.WriteByte('\n'); err != nil {
+		return err
+	}
 
 	return err
 }
 
 func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 
-	flags := os.O_RDONLY
+	var token []metricsdto.Metrics
 
-	file, err := os.OpenFile(pstorage.filePath, flags, 0644)
+	jBytes, err := io.ReadAll(pstorage.reader)
 
+	if err != nil {
+		return []metricsdto.Metrics{}, err
+	}
+
+	err = json.Unmarshal(jBytes, &token)
 	if err != nil {
 		return nil, err
 	}
 
-	reader := bufio.NewScanner(file)
+	return token, nil
+}
 
-	var token []metricsdto.Metrics
-	var tmp metricsdto.Metrics
+func (pstorage *PersistStorage) GetFile() *os.File {
+	return pstorage.file
+}
 
-	for reader.Scan() {
-		jBytes := reader.Bytes()
-		err := json.Unmarshal(jBytes, &tmp)
-		if err != nil {
-			return nil, err
-		}
-		token = append(token, tmp)
-	}
+func (pstorage *PersistStorage) GetLoopTime() int {
+	return pstorage.storeInter
+}
 
-	return token, err
+func (pstorage *PersistStorage) Flush() error {
+
+	return pstorage.writer.Flush()
 }

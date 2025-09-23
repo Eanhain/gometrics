@@ -41,7 +41,7 @@ func GzipHandleWriter(next http.Handler) http.Handler {
 		// значения r.Header.Values("Accept-Encoding") и разбирать строку
 		// на составные части, чтобы избежать неожиданных результатов
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") &&
-			(strings.Contains(r.Header.Get("Content-Type"), "text/html") ||
+			!(strings.Contains(r.Header.Get("Content-Type"), "text/html") ||
 				strings.Contains(r.Header.Get("Content-Type"), "application/json")) {
 			// если gzip не поддерживается, передаём управление
 			// дальше без изменений

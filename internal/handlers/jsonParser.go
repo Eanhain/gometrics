@@ -27,6 +27,10 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	}
 	switch metric.MType {
 	case "gauge":
+		if metric.Value == nil {
+			http.Error(res, "field Value is required for counter", http.StatusBadRequest)
+			return
+		}
 		err = h.service.GaugeInsert(metric.ID, *metric.Value)
 		if err != nil {
 			http.Error(res, "could not insert gauge metric", http.StatusBadRequest)
@@ -34,6 +38,10 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 		}
 		res.WriteHeader(http.StatusOK)
 	case "counter":
+		if metric.Delta == nil {
+			http.Error(res, "delta is required for counter", http.StatusBadRequest)
+			return
+		}
 		err = h.service.CounterInsert(metric.ID, int(*metric.Delta))
 		if err != nil {
 			http.Error(res, "could not insert counter metric", http.StatusBadRequest)
@@ -74,6 +82,7 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 			return
 		}
 		metric.Value = &lVar
+		res.WriteHeader(http.StatusOK)
 	case "counter":
 		lVar, err := h.service.GetCounter(metric.ID)
 		if err != nil {
@@ -82,6 +91,7 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 		}
 		lVar64 := int64(lVar)
 		metric.Delta = &lVar64
+		res.WriteHeader(http.StatusOK)
 	default:
 		http.Error(res, "invalid action type", http.StatusNotFound)
 		return

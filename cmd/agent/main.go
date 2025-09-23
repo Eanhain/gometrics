@@ -39,7 +39,10 @@ func main() {
 		"Sys",
 		"TotalAlloc",
 	}
-	agentPersist := persist.NewPersistStorage("agent")
+	agentPersist, err := persist.NewPersistStorage("agent", -100)
+	if err != nil {
+		panic(err)
+	}
 	newService := service.NewService(storage.NewMemStorage(), agentPersist)
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newService)
 	f := clientconfig.InitialFlags()
