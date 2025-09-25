@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"time"
 
@@ -56,6 +58,10 @@ func (l *LoggerRequest) WithLogging(h http.Handler) http.Handler {
 			ResponseWriter: w,
 			responseData:   responseData,
 		}
+		var buf bytes.Buffer
+		origBody := r.Body
+		r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
+		defer origBody.Close()
 		h.ServeHTTP(&lw, r)
 
 		duration := time.Since(start)
@@ -65,6 +71,7 @@ func (l *LoggerRequest) WithLogging(h http.Handler) http.Handler {
 			"status", lw.responseData.status,
 			"duration", duration,
 			"size", lw.responseData.size,
+			"body", buf.String(),
 		)
 	}
 	return http.HandlerFunc(logFn)
