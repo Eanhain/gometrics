@@ -2,8 +2,10 @@ package logger
 
 import (
 	"bytes"
+	"gometrics/internal/compress"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -58,12 +60,24 @@ func (l *LoggerRequest) WithLogging(h http.Handler) http.Handler {
 			ResponseWriter: w,
 			responseData:   responseData,
 		}
-		var buf bytes.Buffer
+		var bufTMP bytes.Buffer
 		origBody := r.Body
-		r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
+		r.Body = io.NopCloser(io.TeeReader(r.Body, &bufTMP))
 		defer origBody.Close()
 		h.ServeHTTP(&lw, r)
 
+		var buf []byte
+		var err error
+
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			buf, err = compress.Decompress(bufTMP.Bytes())
+			if err != nil {
+				l.Errorw("gzip decompress failed", "err", err)
+			}
+
+		} else {
+			buf = bufTMP.Bytes()
+		}
 		duration := time.Since(start)
 		l.Infoln(
 			"uri", r.RequestURI,
@@ -71,7 +85,7 @@ func (l *LoggerRequest) WithLogging(h http.Handler) http.Handler {
 			"status", lw.responseData.status,
 			"duration", duration,
 			"size", lw.responseData.size,
-			"body", buf.String(),
+			"body", string(buf),
 		)
 	}
 	return http.HandlerFunc(logFn)
