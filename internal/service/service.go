@@ -158,10 +158,10 @@ func (s *Service) LoopFlush() error {
 	sendTimeDuration := time.Duration(s.pstore.GetLoopTime())
 
 	for {
-		time.Sleep(sendTimeDuration * time.Second)
 		err := s.pstore.Flush()
 		if err != nil {
 			return err
 		}
+		time.Sleep(sendTimeDuration * time.Second)
 	}
 }
