@@ -127,7 +127,7 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 	err = json.Unmarshal(jBytes, &token)
 	if err != nil {
 		fmt.Println("can't read json")
-		return []metricsdto.Metrics{}, err
+		return []metricsdto.Metrics{}, nil
 	}
 
 	return token, nil
