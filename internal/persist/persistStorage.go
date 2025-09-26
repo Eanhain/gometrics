@@ -3,6 +3,7 @@ package persist
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	metricsdto "gometrics/internal/api/metricsdto"
 	"io"
 	"log"
@@ -128,7 +129,11 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 
 	err = json.Unmarshal(jBytes, &token)
 	if err != nil {
-		return []metricsdto.Metrics{}, err
+		out := string(jBytes)
+		if len(out) > 256 {
+			out = out[:256]
+		}
+		return []metricsdto.Metrics{}, fmt.Errorf(out, err)
 	}
 
 	return token, nil

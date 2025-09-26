@@ -39,7 +39,7 @@ func main() {
 
 	newHandler := handlers.NewHandlerService(newService, newMux)
 
-	fmt.Println(f.Restore, f.StoreInter)
+	// fmt.Println(f.Restore, f.StoreInter)
 
 	if f.Restore {
 		err := newService.PersistRestore()
