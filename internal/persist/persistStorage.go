@@ -2,7 +2,9 @@ package persist
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	metricsdto "gometrics/internal/api/metricsdto"
 	"io"
@@ -49,18 +51,19 @@ func NewPersistStorage(dirPath string, storeInter int) (*PersistStorage, error) 
 func (pstorage *PersistStorage) FormattingLogs(gauge map[string]float64, counter map[string]int) error {
 	var metrics []metricsdto.Metrics
 	for gkey, gvalue := range gauge {
+		value := gvalue
 		metric := metricsdto.Metrics{
 			ID:    gkey,
 			MType: "gauge",
-			Value: &gvalue}
+			Value: &value}
 		metrics = append(metrics, metric)
 	}
 	for ckey, cvalue := range counter {
-		value64 := int64(cvalue)
+		delta := int64(cvalue)
 		metric := metricsdto.Metrics{
 			ID:    ckey,
 			MType: "counter",
-			Delta: &value64}
+			Delta: &delta}
 		metrics = append(metrics, metric)
 	}
 	metricsByte, err := json.MarshalIndent(metrics, "", "  ")
@@ -88,7 +91,25 @@ func (pstorage *PersistStorage) FormattingLogs(gauge map[string]float64, counter
 }
 
 func (pstorage *PersistStorage) Close() error {
-	return pstorage.file.Close()
+	if pstorage == nil {
+		return nil
+	}
+
+	var errFlush error
+	if pstorage.writer != nil {
+		errFlush = pstorage.writer.Flush()
+	}
+
+	if pstorage.file == nil {
+		return errFlush
+	}
+
+	errClose := pstorage.file.Close()
+	if errFlush != nil || errClose != nil {
+		return errors.Join(errFlush, errClose)
+	}
+
+	return nil
 }
 
 func (pstorage *PersistStorage) WriteLogs(logs []metricsdto.Metrics) error {
@@ -112,33 +133,35 @@ func (pstorage *PersistStorage) WriteLogs(logs []metricsdto.Metrics) error {
 func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 
 	var token []metricsdto.Metrics
-	if pstorage.file == nil || pstorage.file.Name() == "agent" {
+	if pstorage.file == nil {
 		log.Printf("WARN: persist storage disabled; file not configured (agent mode)")
 		return []metricsdto.Metrics{}, nil
 	}
-	if _, err := pstorage.file.Seek(0, 0); err != nil {
+	if _, err := pstorage.file.Seek(0, io.SeekStart); err != nil {
 		return []metricsdto.Metrics{}, err
 	}
-	pstorage.writer.Reset(pstorage.file)
+	var reader io.Reader = pstorage.file
+	if pstorage.reader != nil {
+		pstorage.reader.Reset(pstorage.file)
+		reader = pstorage.reader
+	}
 
-	jBytes, err := io.ReadAll(pstorage.reader)
+	jBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return []metricsdto.Metrics{}, fmt.Errorf("read metrics file: %w", err)
+	}
 
-	if string(jBytes) == " " || string(jBytes) == "" {
+	if len(bytes.TrimSpace(jBytes)) == 0 {
 		log.Printf("INFO: persist storage is empty")
 		return []metricsdto.Metrics{}, nil
 	}
 
-	if err != nil {
-		return []metricsdto.Metrics{}, err
-	}
-
-	err = json.Unmarshal(jBytes, &token)
-	if err != nil {
+	if err := json.Unmarshal(jBytes, &token); err != nil {
 		out := string(jBytes)
 		if len(out) > 256 {
 			out = out[:256]
 		}
-		return []metricsdto.Metrics{}, fmt.Errorf("%v, \nbody: %v", err, out)
+		return []metricsdto.Metrics{}, fmt.Errorf("ERROR: decode metrics file: %w\npayload: %q", err, out)
 	}
 
 	return token, nil
