@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type PersistStorage struct {
@@ -18,12 +19,14 @@ type PersistStorage struct {
 	writer     *bufio.Writer
 	reader     *bufio.Reader
 	storeInter int
+	mu         sync.Mutex
+	pending    []byte
 }
 
 func NewPersistStorage(dirPath string, storeInter int) (*PersistStorage, error) {
 
 	if dirPath == "agent" {
-		return &PersistStorage{nil, nil, nil, -100}, nil
+		return &PersistStorage{storeInter: -100}, nil
 	}
 
 	flags := os.O_RDWR | os.O_CREATE
@@ -70,24 +73,16 @@ func (pstorage *PersistStorage) FormattingLogs(gauge map[string]float64, counter
 	if err != nil {
 		return err
 	}
-	if err := pstorage.file.Truncate(0); err != nil {
-		return err
+
+	pstorage.mu.Lock()
+	defer pstorage.mu.Unlock()
+	pstorage.pending = metricsByte
+
+	if pstorage.storeInter != 0 {
+		return nil
 	}
-	if _, err := pstorage.file.Seek(0, 0); err != nil {
-		return err
-	}
-	pstorage.writer.Reset(pstorage.file)
-	_, err = pstorage.writer.Write(metricsByte)
-	if err != nil {
-		return err
-	}
-	if pstorage.storeInter == 0 {
-		err := pstorage.Flush()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+
+	return pstorage.writeSnapshotLocked()
 }
 
 func (pstorage *PersistStorage) Close() error {
@@ -95,11 +90,7 @@ func (pstorage *PersistStorage) Close() error {
 		return nil
 	}
 
-	var errFlush error
-	if pstorage.writer != nil {
-		errFlush = pstorage.writer.Flush()
-	}
-
+	errFlush := pstorage.Flush()
 	if pstorage.file == nil {
 		return errFlush
 	}
@@ -148,7 +139,7 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 
 	jBytes, err := io.ReadAll(reader)
 	if err != nil {
-		return []metricsdto.Metrics{}, fmt.Errorf("read metrics file: %w", err)
+		return []metricsdto.Metrics{}, fmt.Errorf("can't read metrics file: %w", err)
 	}
 
 	if len(bytes.TrimSpace(jBytes)) == 0 {
@@ -161,7 +152,7 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 		if len(out) > 256 {
 			out = out[:256]
 		}
-		return []metricsdto.Metrics{}, fmt.Errorf("ERROR: decode metrics file: %w\npayload: %q", err, out)
+		return []metricsdto.Metrics{}, fmt.Errorf("decode metrics file: %w\npayload: %q", err, out)
 	}
 
 	return token, nil
@@ -176,6 +167,39 @@ func (pstorage *PersistStorage) GetLoopTime() int {
 }
 
 func (pstorage *PersistStorage) Flush() error {
+	pstorage.mu.Lock()
+	defer pstorage.mu.Unlock()
 
-	return pstorage.writer.Flush()
+	if pstorage.writer == nil || pstorage.file == nil {
+		return nil
+	}
+
+	return pstorage.writeSnapshotLocked()
+}
+
+func (pstorage *PersistStorage) writeSnapshotLocked() error {
+	if pstorage.file == nil {
+		return nil
+	}
+
+	if err := pstorage.file.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := pstorage.file.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
+	pstorage.writer.Reset(pstorage.file)
+
+	if len(pstorage.pending) > 0 {
+		if _, err := pstorage.writer.Write(pstorage.pending); err != nil {
+			return err
+		}
+	}
+
+	if err := pstorage.writer.Flush(); err != nil {
+		return err
+	}
+
+	return pstorage.file.Sync()
 }
