@@ -3,9 +3,9 @@ package persist
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	metricsdto "gometrics/internal/api/metricsdto"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -111,7 +111,10 @@ func (pstorage *PersistStorage) WriteLogs(logs []metricsdto.Metrics) error {
 func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 
 	var token []metricsdto.Metrics
-
+	if pstorage.file == nil || pstorage.file.Name() == "agent" {
+		log.Printf("WARN: persist storage disabled; file not configured (agent mode)")
+		return []metricsdto.Metrics{}, nil
+	}
 	if _, err := pstorage.file.Seek(0, 0); err != nil {
 		return []metricsdto.Metrics{}, err
 	}
@@ -120,14 +123,12 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 	jBytes, err := io.ReadAll(pstorage.reader)
 
 	if err != nil {
-		fmt.Println("can't read metrics to []bytes")
-		return []metricsdto.Metrics{}, nil
+		return []metricsdto.Metrics{}, err
 	}
 
 	err = json.Unmarshal(jBytes, &token)
 	if err != nil {
-		fmt.Println("can't read json")
-		return []metricsdto.Metrics{}, nil
+		return []metricsdto.Metrics{}, err
 	}
 
 	return token, nil
