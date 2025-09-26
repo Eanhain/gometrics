@@ -2,6 +2,7 @@ package runtimemetrics
 
 import (
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"reflect"
 	"runtime"
@@ -120,7 +121,7 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, com
 				SetBody(bufOut).
 				Post(curl)
 			if err != nil {
-				fmt.Println("Can't connect to metrics server")
+				log.Println("ERROR: Can't connect to metrics server")
 			}
 		}
 
@@ -153,7 +154,7 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, com
 				SetBody(bufOut).
 				Post(curl)
 			if err != nil {
-				fmt.Println("Can't connect to metrics server")
+				log.Println("ERROR: Can't connect to metrics server")
 			}
 
 		}

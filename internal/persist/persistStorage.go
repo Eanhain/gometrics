@@ -123,6 +123,11 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 
 	jBytes, err := io.ReadAll(pstorage.reader)
 
+	if string(jBytes) == " " || string(jBytes) == "" {
+		log.Printf("INFO: persist storage is empty")
+		return []metricsdto.Metrics{}, nil
+	}
+
 	if err != nil {
 		return []metricsdto.Metrics{}, err
 	}
@@ -133,7 +138,7 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 		if len(out) > 256 {
 			out = out[:256]
 		}
-		return []metricsdto.Metrics{}, fmt.Errorf(out, err)
+		return []metricsdto.Metrics{}, fmt.Errorf("%v, \nbody: %v", err, out)
 	}
 
 	return token, nil
