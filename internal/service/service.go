@@ -39,12 +39,20 @@ func NewService(inst storage, inst2 persistStorage) *Service {
 
 func (s *Service) GetGauge(key string) (float64, error) {
 	key = strings.ToLower(key)
-	return s.store.GetGauge(key)
+	value, err := s.store.GetGauge(key)
+	if err != nil {
+		return 0, fmt.Errorf("get gauge %s: %w", key, err)
+	}
+	return value, nil
 }
 
 func (s *Service) GetCounter(key string) (int, error) {
 	key = strings.ToLower(key)
-	return s.store.GetCounter(key)
+	value, err := s.store.GetCounter(key)
+	if err != nil {
+		return 0, fmt.Errorf("get counter %s: %w", key, err)
+	}
+	return value, nil
 }
 
 func (s *Service) GetAllMetrics() ([]string, []string, map[string]string) {
@@ -82,16 +90,14 @@ func (s *Service) GetAllCounters() map[string]int {
 
 func (s *Service) GaugeInsert(key string, value float64) error {
 	key = strings.ToLower(key)
-	err := s.store.GaugeInsert(key, value)
-	if err != nil {
-		return err
+	if err := s.store.GaugeInsert(key, value); err != nil {
+		return fmt.Errorf("store gauge %s: %w", key, err)
 	}
 	if s.pstore.GetFile() != nil {
 		gauges := s.GetAllGauges()
 		counters := s.GetAllCounters()
-		err := s.pstore.FormattingLogs(gauges, counters)
-		if err != nil {
-			return err
+		if err := s.pstore.FormattingLogs(gauges, counters); err != nil {
+			return fmt.Errorf("persist gauge %s: %w", key, err)
 		}
 	}
 	return nil
@@ -99,16 +105,14 @@ func (s *Service) GaugeInsert(key string, value float64) error {
 
 func (s *Service) CounterInsert(key string, value int) error {
 	key = strings.ToLower(key)
-	err := s.store.CounterInsert(key, value)
-	if err != nil {
-		return err
+	if err := s.store.CounterInsert(key, value); err != nil {
+		return fmt.Errorf("store counter %s: %w", key, err)
 	}
 	if s.pstore.GetFile() != nil {
 		gauges := s.GetAllGauges()
 		counters := s.GetAllCounters()
-		err := s.pstore.FormattingLogs(gauges, counters)
-		if err != nil {
-			return err
+		if err := s.pstore.FormattingLogs(gauges, counters); err != nil {
+			return fmt.Errorf("persist counter %s: %w", key, err)
 		}
 	}
 	return nil
@@ -121,12 +125,11 @@ func (s *Service) PersistRestore() error {
 	// }
 	metrics, err := s.pstore.ImportLogs()
 	if err != nil {
-		return err
+		return fmt.Errorf("import persisted metrics: %w", err)
 	}
 	for _, metric := range metrics {
-		err = s.FromStructToStore(metric)
-		if err != nil {
-			return err
+		if err = s.FromStructToStore(metric); err != nil {
+			return fmt.Errorf("restore metric %s: %w", metric.ID, err)
 		}
 	}
 	return nil
@@ -135,14 +138,12 @@ func (s *Service) PersistRestore() error {
 func (s *Service) FromStructToStore(metric metricsdto.Metrics) error {
 	switch metric.MType {
 	case "gauge":
-		err := s.GaugeInsert(metric.ID, *metric.Value)
-		if err != nil {
-			return err
+		if err := s.GaugeInsert(metric.ID, *metric.Value); err != nil {
+			return fmt.Errorf("insert gauge %s: %w", metric.ID, err)
 		}
 	case "counter":
-		err := s.CounterInsert(metric.ID, int(*metric.Delta))
-		if err != nil {
-			return err
+		if err := s.CounterInsert(metric.ID, int(*metric.Delta)); err != nil {
+			return fmt.Errorf("insert counter %s: %w", metric.ID, err)
 		}
 	default:
 		return fmt.Errorf("invalid action type")
@@ -151,16 +152,18 @@ func (s *Service) FromStructToStore(metric metricsdto.Metrics) error {
 }
 
 func (s *Service) StorageCloser() error {
-	return s.pstore.Close()
+	if err := s.pstore.Close(); err != nil {
+		return fmt.Errorf("close persist storage: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) LoopFlush() error {
 	sendTimeDuration := time.Duration(s.pstore.GetLoopTime())
 
 	for {
-		err := s.pstore.Flush()
-		if err != nil {
-			return err
+		if err := s.pstore.Flush(); err != nil {
+			return fmt.Errorf("flush persist storage: %w", err)
 		}
 		time.Sleep(sendTimeDuration * time.Second)
 	}
