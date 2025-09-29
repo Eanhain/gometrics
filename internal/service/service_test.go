@@ -9,12 +9,13 @@ import (
 	storageOrig "gometrics/internal/storage"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type stubPersistStorage struct{}
 
-func (s *stubPersistStorage) GaugeInsert(string, float64) error  { return nil }
-func (s *stubPersistStorage) CounterInsert(string, int) error    { return nil }
+func (s *stubPersistStorage) GaugeInsert(string, float64) error { return nil }
+func (s *stubPersistStorage) CounterInsert(string, int) error   { return nil }
 func (s *stubPersistStorage) FormattingLogs(map[string]float64, map[string]int) error {
 	return nil
 }
@@ -112,15 +113,11 @@ func Test_service_GetAllMetrics(t *testing.T) {
 				switch ins.valueType {
 				case "gauge":
 					valueFloat, err := strconv.ParseFloat(ins.rawValue, 64)
-					if err != nil {
-						panic(err)
-					}
+					require.NoError(t, err)
 					tt.service.GaugeInsert(ins.key, valueFloat)
 				case "counter":
 					valueInt64, err := strconv.Atoi(ins.rawValue)
-					if err != nil {
-						panic(err)
-					}
+					require.NoError(t, err)
 					tt.service.CounterInsert(ins.key, valueInt64)
 				}
 			}

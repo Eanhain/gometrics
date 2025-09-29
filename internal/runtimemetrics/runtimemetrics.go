@@ -163,20 +163,17 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, com
 
 }
 
-func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) {
+func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) error {
 	refreshTimeDuration := time.Duration(refreshTime)
 	for {
-		err := ru.FillRepo(metrics)
-		if err != nil {
-			panic(err)
+		if err := ru.FillRepo(metrics); err != nil {
+			return fmt.Errorf("collect runtime metrics: %w", err)
 		}
-		err = ru.service.CounterInsert("PollCount", 1)
-		if err != nil {
-			panic(err)
+		if err := ru.service.CounterInsert("PollCount", 1); err != nil {
+			return fmt.Errorf("update counter PollCount: %w", err)
 		}
-		err = ru.service.GaugeInsert("RandomValue", rand.Float64())
-		if err != nil {
-			panic(err)
+		if err := ru.service.GaugeInsert("RandomValue", rand.Float64()); err != nil {
+			return fmt.Errorf("update gauge RandomValue: %w", err)
 		}
 		time.Sleep(refreshTimeDuration * time.Second)
 	}

@@ -146,10 +146,7 @@ func testRequestJSON(t *testing.T, ts *httptest.Server, method,
 	require.NoError(t, err)
 	var out dto.Metrics
 
-	err = easyjson.Unmarshal(respBody, &out)
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, easyjson.Unmarshal(respBody, &out))
 
 	return resp, out
 }
@@ -211,9 +208,7 @@ func Test_handlerService_JsonInsert(t *testing.T) {
 			defer ts.Close()
 			for _, obj := range tt.value {
 				b, err := easyjson.Marshal(obj)
-				if err != nil {
-					panic(err)
-				}
+				require.NoError(t, err)
 				resp, body := testRequestJSON(t, ts, tt.method, tt.url, b)
 				defer resp.Body.Close()
 				assert.Equal(t, body, obj)
@@ -307,17 +302,13 @@ func Test_handlerService_JsonGet(t *testing.T) {
 			defer ts.Close()
 			for _, obj := range tt.expect {
 				b, err := easyjson.Marshal(obj)
-				if err != nil {
-					panic(err)
-				}
+				require.NoError(t, err)
 				resp, _ := testRequestJSON(t, ts, tt.method, "/update/", b)
 				defer resp.Body.Close()
 			}
 			for it, obj := range tt.req {
 				b, err := easyjson.Marshal(obj)
-				if err != nil {
-					panic(err)
-				}
+				require.NoError(t, err)
 				resp, body := testRequestJSON(t, ts, tt.method, tt.url, b)
 				defer resp.Body.Close()
 				assert.Equal(t, tt.expect[it], body)

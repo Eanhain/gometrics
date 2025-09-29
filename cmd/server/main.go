@@ -22,11 +22,14 @@ func main() {
 	pstore, err := persist.NewPersistStorage(f.FilePath, f.StoreInter)
 
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("init persist storage: %w", err))
 	}
 
 	newStorage := storage.NewMemStorage()
-	newLogger := logger.CreateLoggerRequest()
+	newLogger, err := logger.CreateLoggerRequest()
+	if err != nil {
+		panic(fmt.Errorf("init request logger: %w", err))
+	}
 
 	newMux := chi.NewMux()
 	newMux.Use(newLogger.WithLogging)
@@ -42,9 +45,8 @@ func main() {
 	// fmt.Println(f.Restore, f.StoreInter)
 
 	if f.Restore {
-		err := newService.PersistRestore()
-		if err != nil {
-			panic(err)
+		if err := newService.PersistRestore(); err != nil {
+			panic(fmt.Errorf("restore persisted metrics: %w", err))
 		}
 	}
 
@@ -53,7 +55,9 @@ func main() {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			newService.LoopFlush()
+			if err := newService.LoopFlush(); err != nil {
+				panic(fmt.Errorf("run flush loop: %w", err))
+			}
 		}()
 
 		go func() {
@@ -65,7 +69,7 @@ func main() {
 
 			err = http.ListenAndServe(f.GetAddr(), r)
 			if err != nil {
-				panic(err)
+				panic(fmt.Errorf("listen and serve on %s: %w", f.GetAddr(), err))
 			}
 		}()
 		wg.Wait()
@@ -76,7 +80,7 @@ func main() {
 
 		err = http.ListenAndServe(f.GetAddr(), r)
 		if err != nil {
-			panic(err)
+			panic(fmt.Errorf("listen and serve on %s: %w", f.GetAddr(), err))
 		}
 	} else {
 		panic(fmt.Errorf("please, set STORE_INTERVAL >= 0"))

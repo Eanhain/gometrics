@@ -48,10 +48,9 @@ func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Reque
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	format := "%s: %s<br>"
 	for _, key := range keys {
-		_, err := fmt.Fprintf(res, format, key, metrics[key])
-		if err != nil {
-			http.Error(res, "cannot parse metric", http.StatusBadRequest)
-			panic(err)
+		if _, err := fmt.Fprintf(res, format, key, metrics[key]); err != nil {
+			http.Error(res, "cannot render metric", http.StatusBadRequest)
+			return
 		}
 	}
 	res.WriteHeader(http.StatusOK)
@@ -68,10 +67,9 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 			http.Error(res, "gauge metric not found", http.StatusNotFound)
 			return
 		}
-		_, err = fmt.Fprintf(res, format, value)
-		if err != nil {
-			http.Error(res, "cannot parse metric", http.StatusBadRequest)
-			panic(err)
+		if _, err = fmt.Fprintf(res, format, value); err != nil {
+			http.Error(res, "cannot render metric", http.StatusBadRequest)
+			return
 		}
 		res.WriteHeader(http.StatusOK)
 	case "counter":
@@ -80,9 +78,9 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 			http.Error(res, "counter metric not found", http.StatusNotFound)
 			return
 		}
-		_, err = fmt.Fprintf(res, format, value)
-		if err != nil {
-			panic(err)
+		if _, err = fmt.Fprintf(res, format, value); err != nil {
+			http.Error(res, "cannot render metric", http.StatusBadRequest)
+			return
 		}
 		res.WriteHeader(http.StatusOK)
 	default:

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"gometrics/internal/clientconfig"
 	"gometrics/internal/persist"
 	"gometrics/internal/runtimemetrics"
@@ -41,7 +42,7 @@ func main() {
 	}
 	agentPersist, err := persist.NewPersistStorage("agent", -100)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("init agent persist storage: %w", err))
 	}
 	newService := service.NewService(storage.NewMemStorage(), agentPersist)
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newService)
@@ -53,14 +54,15 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		metricsGen.GetLoopMetrics(f.PollInterval, metrics)
+		if err := metricsGen.GetLoopMetrics(f.PollInterval, metrics); err != nil {
+			panic(fmt.Errorf("runtime metrics loop: %w", err))
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		err := metricsGen.SendMetrics(f.GetHost(), f.GetPort(), f.ReportInterval, f.Compress)
-		if err != nil {
-			panic(err)
+		if err := metricsGen.SendMetrics(f.GetHost(), f.GetPort(), f.ReportInterval, f.Compress); err != nil {
+			panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
 		}
 	}()
 

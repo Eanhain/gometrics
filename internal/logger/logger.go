@@ -2,6 +2,7 @@ package logger
 
 import (
 	"bytes"
+	"fmt"
 	"gometrics/internal/compress"
 	"io"
 	"net/http"
@@ -27,12 +28,12 @@ type (
 	}
 )
 
-func CreateLoggerRequest() *LoggerRequest {
+func CreateLoggerRequest() (*LoggerRequest, error) {
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("create zap logger: %w", err)
 	}
-	return &LoggerRequest{logger.Sugar()}
+	return &LoggerRequest{logger.Sugar()}, nil
 }
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {

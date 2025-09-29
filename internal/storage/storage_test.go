@@ -29,9 +29,7 @@ func Test_memStorage_GaugeInsert(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			value, err := strconv.ParseFloat(tt.args.rawValue, 64)
-			if err != nil {
-				panic(err)
-			}
+			require.NoError(t, err)
 			err = tt.storage.GaugeInsert(tt.args.key, value)
 			require.NoError(t, err)
 			stored, err := tt.storage.GetGauge(tt.args.key)
@@ -69,9 +67,7 @@ func Test_memStorage_CounterInsert(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			value, err := strconv.Atoi(tt.args.rawValue)
-			if err != nil {
-				panic(err)
-			}
+			require.NoError(t, err)
 			err = tt.storage.CounterInsert(tt.args.key, value)
 			require.NoError(t, err)
 			result, err := tt.storage.GetCounter(tt.args.key)
