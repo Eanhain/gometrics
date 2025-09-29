@@ -9,7 +9,10 @@ import (
 )
 
 type ServerConfigs struct {
-	Addr addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
+	Addr       addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
+	StoreInter int       `env:"STORE_INTERVAL" envDefault:"300"`
+	FilePath   string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"`
+	Restore    bool      `env:"RESTORE" envDefault:"true"`
 }
 
 func (o *ServerConfigs) GetPort() string {
@@ -35,5 +38,8 @@ func (o *ServerConfigs) ParseFlags() {
 		fmt.Println("env vars not found")
 	}
 	flag.Var(&o.Addr, "a", "Host and port for connect/create")
+	flag.IntVar(&o.StoreInter, "i", o.StoreInter, "Flush metrics interval")
+	flag.StringVar(&o.FilePath, "f", o.FilePath, "Metrics store file destination")
+	flag.BoolVar(&o.Restore, "r", o.Restore, "Restore metrics from json file")
 	flag.Parse()
 }

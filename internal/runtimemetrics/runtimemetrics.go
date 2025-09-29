@@ -2,13 +2,21 @@ package runtimemetrics
 
 import (
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
+
+	metricsdto "gometrics/internal/api/metricsdto"
+
+	myCompress "gometrics/internal/compress"
+
+	easyjson "github.com/mailru/easyjson"
 )
 
 type runtimeUpdate struct {
@@ -18,12 +26,11 @@ type runtimeUpdate struct {
 }
 
 type serviceInt interface {
-	GaugeInsert(key string, value float64) int
-	CounterInsert(key string, value int) int
-	GetUpdateUrls(host string, port string) []string
+	GaugeInsert(key string, value float64) error
+	CounterInsert(key string, value int) error
+	GetAllMetrics() ([]string, []string, map[string]string)
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
-	GetAllMetrics() map[string]string
 }
 
 func NewRuntimeUpdater(service serviceInt) *runtimeUpdate {
@@ -65,38 +72,109 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 		if err != nil {
 			return err
 		}
-		ru.service.GaugeInsert(strings.ToLower(metricName), value)
+		err = ru.service.GaugeInsert(strings.ToLower(metricName), value)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int) {
+func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, compress string) error {
 	sendTimeDuration := time.Duration(sendTime)
+	var bufOut []byte
+	curl := fmt.Sprintf("http://%v%v/update/", host, port)
+
 	for {
-		urls := ru.service.GetUpdateUrls(host, port)
-		for _, url := range urls {
-			_, err := ru.client.R().
-				SetHeader("Content-Type", "text/plain").
-				Post(url)
+		req := ru.client.R().
+			SetHeader("Content-Type", "application/json")
+		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics()
+		for _, key := range keysGauge {
+
+			valueString := metricMaps[key]
+			valueFloat, err := strconv.ParseFloat(valueString, 64)
+
 			if err != nil {
-				fmt.Printf("Can't send metric %v\n", url)
-				break
+				return err
 			}
+			metrics := metricsdto.Metrics{ID: key, MType: "gauge", Value: &valueFloat}
+			bufTemp, err := easyjson.Marshal(metrics)
+			if err != nil {
+				return err
+			}
+
+			switch compress {
+			case "gzip":
+				bufOut, err = myCompress.Compress(bufTemp)
+				if err != nil {
+					return err
+				}
+				req.
+					SetHeader("Accept-Encoding", "gzip").
+					SetHeader("Content-Encoding", "gzip")
+			case "false":
+				bufOut = bufTemp
+			default:
+				bufOut = bufTemp
+			}
+			_, err = req.
+				SetBody(bufOut).
+				Post(curl)
+			if err != nil {
+				log.Println("WARN: Can't connect to metrics server")
+			}
+		}
+
+		for _, key := range keysCounter {
+			value := metricMaps[key]
+			valueInt, err := strconv.Atoi(value)
+			int64Value := int64(valueInt)
+			if err != nil {
+				return err
+			}
+			metrics := metricsdto.Metrics{ID: key, MType: "counter", Delta: &int64Value}
+			bufTemp, err := easyjson.Marshal(metrics)
+			if err != nil {
+				return err
+			}
+			switch compress {
+			case "gzip":
+				bufOut, err = myCompress.Compress(bufTemp)
+				if err != nil {
+					return err
+				}
+				req.SetHeader("Accept-Encoding", "gzip").
+					SetHeader("Content-Encoding", "gzip")
+			case "false":
+				bufOut = bufTemp
+			default:
+				bufOut = bufTemp
+			}
+			_, err = req.
+				SetBody(bufOut).
+				Post(curl)
+			if err != nil {
+				log.Println("WARN: Can't connect to metrics server")
+			}
+
 		}
 		time.Sleep(sendTimeDuration * time.Second)
 	}
 
 }
 
-func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) {
+func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) error {
 	refreshTimeDuration := time.Duration(refreshTime)
 	for {
-		err := ru.FillRepo(metrics)
-		if err != nil {
-			panic(err)
+		if err := ru.FillRepo(metrics); err != nil {
+			return fmt.Errorf("collect runtime metrics: %w", err)
 		}
-		ru.service.CounterInsert("PollCount", 1)
-		ru.service.GaugeInsert("RandomValue", rand.Float64())
+		if err := ru.service.CounterInsert("PollCount", 1); err != nil {
+			return fmt.Errorf("update counter PollCount: %w", err)
+		}
+		if err := ru.service.GaugeInsert("RandomValue", rand.Float64()); err != nil {
+			return fmt.Errorf("update gauge RandomValue: %w", err)
+		}
 		time.Sleep(refreshTimeDuration * time.Second)
 	}
 }
