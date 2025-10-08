@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -48,6 +49,7 @@ func (h *handlerService) CreateHandlers() {
 func (h *handlerService) PingDB(res http.ResponseWriter, req *http.Request) {
 	err := h.service.PingDB(req.Context())
 	if err != nil {
+		log.Printf("cannot ping db: %v", err)
 		http.Error(res, fmt.Sprintf("cannot ping db: %v", err), http.StatusInternalServerError)
 		return
 	}
