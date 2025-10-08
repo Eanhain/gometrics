@@ -51,7 +51,6 @@ func (h *handlerService) PingDB(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, fmt.Sprintf("cannot ping db: %v", err), http.StatusInternalServerError)
 	}
 	res.WriteHeader(http.StatusOK)
-	return
 }
 
 func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
