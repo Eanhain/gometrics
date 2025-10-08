@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"testing"
@@ -27,6 +28,11 @@ func (s *stubPersistStorage) GetLoopTime() int  { return 0 }
 func (s *stubPersistStorage) Close() error      { return nil }
 func (s *stubPersistStorage) Flush() error      { return nil }
 
+type stubDBStorage struct{}
+
+func (s *stubDBStorage) PingDB(context.Context) error { return nil }
+func (s *stubDBStorage) Close() error                 { return nil }
+
 func Test_service_GetAllMetrics(t *testing.T) {
 	type args struct {
 		key       string
@@ -46,7 +52,7 @@ func Test_service_GetAllMetrics(t *testing.T) {
 	}{
 		{
 			name:    "Test insert & get metrics",
-			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
+			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}),
 			args: []args{
 				{key: "g1", rawValue: "1", valueType: "gauge"},
 				{key: "g2", rawValue: "2", valueType: "gauge"},
@@ -66,7 +72,7 @@ func Test_service_GetAllMetrics(t *testing.T) {
 		},
 		{
 			name:    "Empty test",
-			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
+			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}),
 			args:    []args{{}},
 			want: want{
 				counterKeys: []string{},
@@ -76,7 +82,7 @@ func Test_service_GetAllMetrics(t *testing.T) {
 		},
 		{
 			name:    "Only gauge",
-			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
+			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}),
 			args: []args{
 				{key: "g1", rawValue: "1", valueType: "gauge"},
 				{key: "g2", rawValue: "2", valueType: "gauge"},
@@ -92,7 +98,7 @@ func Test_service_GetAllMetrics(t *testing.T) {
 		},
 		{
 			name:    "Only counter",
-			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
+			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}),
 			args: []args{
 				{key: "c1", rawValue: "1", valueType: "counter"},
 				{key: "c2", rawValue: "2", valueType: "counter"},

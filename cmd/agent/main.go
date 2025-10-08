@@ -44,7 +44,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("init agent persist storage: %w", err))
 	}
-	newService := service.NewService(storage.NewMemStorage(), agentPersist)
+	newService := service.NewService(storage.NewMemStorage(), agentPersist, nil)
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newService)
 	f := clientconfig.InitialFlags()
 	f.ParseFlags()

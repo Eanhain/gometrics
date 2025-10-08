@@ -48,7 +48,7 @@ func (h *handlerService) CreateHandlers() {
 func (h *handlerService) PingDB(res http.ResponseWriter, req *http.Request) {
 	err := h.service.PingDB(req.Context())
 	if err != nil {
-		http.Error(res, fmt.Sprintf("cannot ping db \n%w", err), http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("cannot ping db: %v", err), http.StatusInternalServerError)
 	}
 }
 
@@ -59,7 +59,7 @@ func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Reque
 	format := "%s: %s<br>"
 	for _, key := range keys {
 		if _, err := fmt.Fprintf(res, format, key, metrics[key]); err != nil {
-			http.Error(res, "cannot render metric", http.StatusBadRequest)
+			http.Error(res, fmt.Sprintf("cannot render metric: %v", err), http.StatusBadRequest)
 			return
 		}
 	}
@@ -74,22 +74,22 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 	case "gauge":
 		value, err := h.service.GetGauge(nameMetric)
 		if err != nil {
-			http.Error(res, "gauge metric not found", http.StatusNotFound)
+			http.Error(res, fmt.Sprintf("gauge metric not found: %v", err), http.StatusNotFound)
 			return
 		}
 		if _, err = fmt.Fprintf(res, format, value); err != nil {
-			http.Error(res, "cannot render metric", http.StatusBadRequest)
+			http.Error(res, fmt.Sprintf("cannot render metric: %v", err), http.StatusBadRequest)
 			return
 		}
 		res.WriteHeader(http.StatusOK)
 	case "counter":
 		value, err := h.service.GetCounter(nameMetric)
 		if err != nil {
-			http.Error(res, "counter metric not found", http.StatusNotFound)
+			http.Error(res, fmt.Sprintf("counter metric not found: %v", err), http.StatusNotFound)
 			return
 		}
 		if _, err = fmt.Fprintf(res, format, value); err != nil {
-			http.Error(res, "cannot render metric", http.StatusBadRequest)
+			http.Error(res, fmt.Sprintf("cannot render metric: %v", err), http.StatusBadRequest)
 			return
 		}
 		res.WriteHeader(http.StatusOK)
@@ -107,24 +107,24 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 	case "gauge":
 		value, err := strconv.ParseFloat(valueMetric, 64)
 		if err != nil {
-			http.Error(res, "could not parse gaude metric", http.StatusBadRequest)
+			http.Error(res, fmt.Sprintf("could not parse gauge metric: %v", err), http.StatusBadRequest)
 			return
 		}
 		err = h.service.GaugeInsert(nameMetric, value)
 		if err != nil {
-			http.Error(res, "could not insert gauge metric", http.StatusBadRequest)
+			http.Error(res, fmt.Sprintf("could not insert gauge metric: %v", err), http.StatusBadRequest)
 			return
 		}
 		res.WriteHeader(http.StatusOK)
 	case "counter":
 		value, err := strconv.Atoi(valueMetric)
 		if err != nil {
-			http.Error(res, "could not parse counter metric", http.StatusBadRequest)
+			http.Error(res, fmt.Sprintf("could not parse counter metric: %v", err), http.StatusBadRequest)
 			return
 		}
 		err = h.service.CounterInsert(nameMetric, value)
 		if err != nil {
-			http.Error(res, "could not insert counter metric", http.StatusBadRequest)
+			http.Error(res, fmt.Sprintf("could not insert counter metric: %v", err), http.StatusBadRequest)
 			return
 		}
 		res.WriteHeader(http.StatusOK)

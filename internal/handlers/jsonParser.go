@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 
 	metricsdto "gometrics/internal/api/metricsdto"
@@ -17,12 +18,12 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	// читаем тело запроса
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
-		http.Error(res, "failed to read request body", http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusInternalServerError)
 		return
 	}
 	// десериализуем JSON в Metrics
 	if err = easyjson.Unmarshal(buf.Bytes(), &metric); err != nil {
-		http.Error(res, "failed to decode metric", http.StatusBadRequest)
+		http.Error(res, fmt.Sprintf("failed to decode metric: %v", err), http.StatusBadRequest)
 		return
 	}
 	switch metric.MType {
@@ -32,7 +33,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 			return
 		}
 		if err = h.service.GaugeInsert(metric.ID, *metric.Value); err != nil {
-			http.Error(res, "could not store gauge metric", http.StatusInternalServerError)
+			http.Error(res, fmt.Sprintf("could not store gauge metric: %v", err), http.StatusInternalServerError)
 			return
 		}
 		res.WriteHeader(http.StatusOK)
@@ -42,7 +43,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 			return
 		}
 		if err = h.service.CounterInsert(metric.ID, int(*metric.Delta)); err != nil {
-			http.Error(res, "could not store counter metric", http.StatusInternalServerError)
+			http.Error(res, fmt.Sprintf("could not store counter metric: %v", err), http.StatusInternalServerError)
 			return
 		}
 		res.WriteHeader(http.StatusOK)
@@ -52,7 +53,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	}
 	out, err := easyjson.Marshal(metric)
 	if err != nil {
-		http.Error(res, "cannot marshal metric", http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("cannot marshal metric: %v", err), http.StatusInternalServerError)
 		return
 	}
 	res.WriteHeader(http.StatusOK)
@@ -66,12 +67,12 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 	// читаем тело запроса
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
-		http.Error(res, "failed to read request body", http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusInternalServerError)
 		return
 	}
 	// десериализуем JSON в Metrics
 	if err = easyjson.Unmarshal(buf.Bytes(), &metric); err != nil {
-		http.Error(res, "failed to decode metric", http.StatusBadRequest)
+		http.Error(res, fmt.Sprintf("failed to decode metric: %v", err), http.StatusBadRequest)
 		return
 	}
 	switch metric.MType {
@@ -98,7 +99,7 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 	}
 	out, err := easyjson.Marshal(metric)
 	if err != nil {
-		http.Error(res, "cannot marshal metric", http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("cannot marshal metric: %v", err), http.StatusInternalServerError)
 		return
 	}
 	res.WriteHeader(http.StatusOK)

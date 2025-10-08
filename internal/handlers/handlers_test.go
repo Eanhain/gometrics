@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +33,11 @@ func (s *stubPersistStorage) GetFile() *os.File { return nil }
 func (s *stubPersistStorage) GetLoopTime() int  { return 0 }
 func (s *stubPersistStorage) Close() error      { return nil }
 func (s *stubPersistStorage) Flush() error      { return nil }
+
+type stubDBStorage struct{}
+
+func (s *stubDBStorage) PingDB(context.Context) error { return nil }
+func (s *stubDBStorage) Close() error                 { return nil }
 
 func testRequest(t *testing.T, ts *httptest.Server, method,
 	path string) (*http.Response, string) {
@@ -123,7 +129,7 @@ func Test_handlerService_CreateHandlers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
@@ -202,7 +208,7 @@ func Test_handlerService_JsonInsert(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
@@ -296,7 +302,7 @@ func Test_handlerService_JsonGet(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
