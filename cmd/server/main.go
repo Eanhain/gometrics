@@ -32,7 +32,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("init request logger: %w", err))
 	}
-
+	log.Printf("attempting DB connection %v", f.DatabaseDSN)
 	newDB, err := db.CreateConnection("postgres", f.DatabaseDSN)
 	if err != nil {
 		log.Fatalf("DB conn error:: %v", err)
