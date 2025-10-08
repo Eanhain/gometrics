@@ -49,6 +49,7 @@ func (h *handlerService) PingDB(res http.ResponseWriter, req *http.Request) {
 	err := h.service.PingDB(req.Context())
 	if err != nil {
 		http.Error(res, fmt.Sprintf("cannot ping db: %v", err), http.StatusInternalServerError)
+		return
 	}
 	res.WriteHeader(http.StatusOK)
 }
