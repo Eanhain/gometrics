@@ -13,7 +13,7 @@ type ServerConfigs struct {
 	StoreInter  int       `env:"STORE_INTERVAL" envDefault:"300"`
 	FilePath    string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"`
 	Restore     bool      `env:"RESTORE" envDefault:"true"`
-	DatabaseDSN string    `env:"DATABASE_DSN" envDefault:"postgres://db_user:s3cret@127.0.0.1:5432/mon?sslmode=disable"`
+	DatabaseDSN string    `env:"DATABASE_DSN" envDefault:""`
 }
 
 func (o *ServerConfigs) GetPort() string {

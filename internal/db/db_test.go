@@ -24,7 +24,7 @@ func TestCreateConnection(t *testing.T) {
 }
 
 func TestMemStoragePingDB(t *testing.T) {
-	sqlDB, mock, err := sqlmock.New()
+	sqlDB, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 	require.NoError(t, err)
 	defer sqlDB.Close()
 
