@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"gometrics/internal/api/metricsdto"
 	"os"
@@ -28,13 +29,23 @@ type persistStorage interface {
 	Flush() error
 }
 
+type dbStorage interface {
+	PingDB(ctx context.Context) error
+	Close() error
+}
+
 type Service struct {
-	store  storage
-	pstore persistStorage
+	store     storage
+	pstore    persistStorage
+	dbStorage dbStorage
 }
 
 func NewService(inst storage, inst2 persistStorage) *Service {
 	return &Service{store: inst, pstore: inst2}
+}
+
+func (s *Service) PingDB(ctx context.Context) error {
+	return s.dbStorage.PingDB(ctx)
 }
 
 func (s *Service) GetGauge(key string) (float64, error) {

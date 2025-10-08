@@ -9,10 +9,11 @@ import (
 )
 
 type ServerConfigs struct {
-	Addr       addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
-	StoreInter int       `env:"STORE_INTERVAL" envDefault:"300"`
-	FilePath   string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"`
-	Restore    bool      `env:"RESTORE" envDefault:"true"`
+	Addr        addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
+	StoreInter  int       `env:"STORE_INTERVAL" envDefault:"300"`
+	FilePath    string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"`
+	Restore     bool      `env:"RESTORE" envDefault:"true"`
+	DatabaseDSN string    `env:"DATABASE_DSN" envDefault:"db_user:s3cret@127.0.0.1:5432/mon?sslmode=disable"`
 }
 
 func (o *ServerConfigs) GetPort() string {
@@ -40,6 +41,7 @@ func (o *ServerConfigs) ParseFlags() {
 	flag.Var(&o.Addr, "a", "Host and port for connect/create")
 	flag.IntVar(&o.StoreInter, "i", o.StoreInter, "Flush metrics interval")
 	flag.StringVar(&o.FilePath, "f", o.FilePath, "Metrics store file destination")
+	flag.StringVar(&o.DatabaseDSN, "d", o.FilePath, "DB connection string")
 	flag.BoolVar(&o.Restore, "r", o.Restore, "Restore metrics from json file")
 	flag.Parse()
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	myCompress "gometrics/internal/compress"
+	"gometrics/internal/db"
 	"gometrics/internal/handlers"
 	"gometrics/internal/logger"
 	"gometrics/internal/persist"
@@ -30,6 +31,13 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("init request logger: %w", err))
 	}
+
+	newDb, err := db.CreateConnection("postgres", f.DatabaseDSN)
+	if err != nil {
+		panic(fmt.Errorf("DB conn error: %w", err))
+	}
+
+	defer newDb.Close()
 
 	newMux := chi.NewMux()
 	newMux.Use(newLogger.WithLogging)
