@@ -40,8 +40,8 @@ type Service struct {
 	dbStorage dbStorage
 }
 
-func NewService(inst storage, inst2 persistStorage) *Service {
-	return &Service{store: inst, pstore: inst2}
+func NewService(inst storage, inst2 persistStorage, inst3 dbStorage) *Service {
+	return &Service{store: inst, pstore: inst2, dbStorage: inst3}
 }
 
 func (s *Service) PingDB(ctx context.Context) error {
@@ -165,6 +165,13 @@ func (s *Service) FromStructToStore(metric metricsdto.Metrics) error {
 func (s *Service) StorageCloser() error {
 	if err := s.pstore.Close(); err != nil {
 		return fmt.Errorf("close persist storage: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) DBCloser() error {
+	if err := s.dbStorage.Close(); err != nil {
+		return fmt.Errorf("close db storage: %w", err)
 	}
 	return nil
 }

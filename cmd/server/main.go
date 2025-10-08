@@ -37,16 +37,15 @@ func main() {
 		panic(fmt.Errorf("DB conn error: %w", err))
 	}
 
-	defer newDb.Close()
-
 	newMux := chi.NewMux()
 	newMux.Use(newLogger.WithLogging)
 	newMux.Use(myCompress.GzipHandleReader)
 	newMux.Use(myCompress.GzipHandleWriter)
 
-	newService := service.NewService(newStorage, pstore)
+	newService := service.NewService(newStorage, pstore, newDb)
 
 	defer newService.StorageCloser()
+	defer newService.DBCloser()
 
 	newHandler := handlers.NewHandlerService(newService, newMux)
 

@@ -48,7 +48,7 @@ func (h *handlerService) CreateHandlers() {
 func (h *handlerService) PingDB(res http.ResponseWriter, req *http.Request) {
 	err := h.service.PingDB(req.Context())
 	if err != nil {
-		http.Error(res, "cannot ping db", http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("cannot ping db \n%w", err), http.StatusInternalServerError)
 	}
 }
 
