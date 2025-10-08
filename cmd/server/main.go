@@ -32,7 +32,7 @@ func main() {
 		panic(fmt.Errorf("init request logger: %w", err))
 	}
 
-	newDb, err := db.CreateConnection("postgres", f.DatabaseDSN)
+	newDB, err := db.CreateConnection("postgres", f.DatabaseDSN)
 	if err != nil {
 		panic(fmt.Errorf("DB conn error: %w", err))
 	}
@@ -42,7 +42,7 @@ func main() {
 	newMux.Use(myCompress.GzipHandleReader)
 	newMux.Use(myCompress.GzipHandleWriter)
 
-	newService := service.NewService(newStorage, pstore, newDb)
+	newService := service.NewService(newStorage, pstore, newDB)
 
 	defer newService.StorageCloser()
 	defer newService.DBCloser()
