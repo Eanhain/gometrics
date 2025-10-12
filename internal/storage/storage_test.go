@@ -58,8 +58,12 @@ func Test_memStorage_CounterInsert(t *testing.T) {
 		},
 		{
 			name: "appendToMemStorage",
-			storage: &MemStorage{gauge: map[string]float64{"mem": 7.81},
-				counter: map[string]int{"cpu": 6}},
+			storage: func() *MemStorage {
+				ms := NewMemStorage()
+				require.NoError(t, ms.GaugeInsert("mem", 7.81))
+				require.NoError(t, ms.CounterInsert("cpu", 6))
+				return ms
+			}(),
 			args: args{key: "cpu", rawValue: "1"},
 			want: 7,
 		},

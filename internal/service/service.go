@@ -93,7 +93,6 @@ func (s *Service) GetAllCounters() map[string]int {
 }
 
 func (s *Service) GaugeInsert(key string, value float64) error {
-	key = strings.ToLower(key)
 	if err := s.store.GaugeInsert(key, value); err != nil {
 		return fmt.Errorf("store gauge %s: %w", key, err)
 	}
@@ -108,7 +107,6 @@ func (s *Service) GaugeInsert(key string, value float64) error {
 }
 
 func (s *Service) CounterInsert(key string, value int) error {
-	key = strings.ToLower(key)
 	if err := s.store.CounterInsert(key, value); err != nil {
 		return fmt.Errorf("store counter %s: %w", key, err)
 	}
