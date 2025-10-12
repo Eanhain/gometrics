@@ -27,7 +27,7 @@ type DBStorage struct {
 }
 
 func CreateConnection(ctx context.Context, dbType, connectionString string) (*DBStorage, error) {
-	db, err := sql.Open("postgres", connectionString)
+	db, err := sql.Open(dbType, connectionString)
 	if err != nil {
 		return nil, fmt.Errorf("open connection: %w", err)
 	}

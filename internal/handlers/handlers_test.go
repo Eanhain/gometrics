@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	dto "gometrics/internal/api/metricsdto"
@@ -21,23 +20,18 @@ import (
 
 type stubPersistStorage struct{}
 
-func (s *stubPersistStorage) GaugeInsert(string, float64) error { return nil }
-func (s *stubPersistStorage) CounterInsert(string, int) error   { return nil }
-func (s *stubPersistStorage) FormattingLogs(map[string]float64, map[string]int) error {
+func (s *stubPersistStorage) FormattingLogs(context.Context, map[string]float64, map[string]int) error {
 	return nil
 }
-func (s *stubPersistStorage) ImportLogs() ([]dto.Metrics, error) {
+func (s *stubPersistStorage) ImportLogs(context.Context) ([]dto.Metrics, error) {
 	return nil, nil
 }
-func (s *stubPersistStorage) GetFile() *os.File { return nil }
-func (s *stubPersistStorage) GetLoopTime() int  { return 0 }
-func (s *stubPersistStorage) Close() error      { return nil }
-func (s *stubPersistStorage) Flush() error      { return nil }
-
-type stubDBStorage struct{}
-
-func (s *stubDBStorage) PingDB(context.Context) error { return nil }
-func (s *stubDBStorage) Close() error                 { return nil }
+func (s *stubPersistStorage) GetLoopTime() int { return 0 }
+func (s *stubPersistStorage) Close() error     { return nil }
+func (s *stubPersistStorage) Flush() error     { return nil }
+func (s *stubPersistStorage) Ping(context.Context) error {
+	return nil
+}
 
 func testRequest(t *testing.T, ts *httptest.Server, method,
 	path string) (*http.Response, string) {
@@ -129,7 +123,7 @@ func Test_handlerService_CreateHandlers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
@@ -208,7 +202,7 @@ func Test_handlerService_JsonInsert(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()
@@ -302,7 +296,7 @@ func Test_handlerService_JsonGet(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}, &stubDBStorage{}), chi.NewMux())
+			h := NewHandlerService(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), chi.NewMux())
 			h.CreateHandlers()
 			ts := httptest.NewServer(h.GetRouter())
 			defer ts.Close()

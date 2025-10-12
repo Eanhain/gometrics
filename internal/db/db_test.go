@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -11,26 +12,34 @@ import (
 func TestCreateConnection(t *testing.T) {
 	const dsn = "sqlmock_create_conn"
 
-	sqlDB, mock, err := sqlmock.NewWithDSN(dsn)
+	sqlDB, mock, err := sqlmock.NewWithDSN(dsn, sqlmock.MonitorPingsOption(true))
 	require.NoError(t, err)
-	mock.ExpectClose()
-	require.NoError(t, sqlDB.Close())
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
 
-	conn, err := CreateConnection("sqlmock", dsn)
+	mock.ExpectPing()
+	mock.ExpectExec(regexp.QuoteMeta(initDDL)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectClose()
+
+	conn, err := CreateConnection(context.Background(), "sqlmock", dsn)
 	require.NoError(t, err)
 	require.NotNil(t, conn)
+
 	require.NoError(t, conn.Close())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestMemStoragePingDB(t *testing.T) {
+func TestDBStoragePing(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 	require.NoError(t, err)
-	defer sqlDB.Close()
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
 
 	mock.ExpectPing()
 
-	storage := &MemStorage{DB: sqlDB}
-	require.NoError(t, storage.PingDB(context.Background()))
+	storage := &DBStorage{DB: sqlDB}
+	require.NoError(t, storage.Ping(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
