@@ -10,8 +10,6 @@ import (
 )
 
 const initDDL = `
-// CREATE SCHEMA IF NOT EXISTS praktikum;
-
 CREATE TABLE IF NOT EXISTS metrics (
     ID      TEXT PRIMARY KEY,
     MType  TEXT NOT NULL,
@@ -45,8 +43,8 @@ func CreateConnection(ctx context.Context, dbType, connectionString string) (*DB
 	return &DBStorage{db, 0}, nil
 }
 
-func (s *DBStorage) Ping(ctx context.Context) error {
-	return s.PingContext(ctx)
+func (db *DBStorage) Ping(ctx context.Context) error {
+	return db.PingContext(ctx)
 }
 
 func (db *DBStorage) ImportLogs(ctx context.Context) ([]metricsdto.Metrics, error) {
@@ -135,23 +133,13 @@ func (db *DBStorage) FormattingLogs(ctx context.Context, gauge map[string]float6
 	defer counterStmt.Close()
 
 	for gkey, gvalue := range gauge {
-		value := gvalue
-		metric := metricsdto.Metrics{
-			ID:    gkey,
-			MType: "gauge",
-			Value: &value}
-		_, err := gaugeStmt.ExecContext(ctx, metric.ID, value)
+		_, err := gaugeStmt.ExecContext(ctx, gkey, gvalue)
 		if err != nil {
 			return fmt.Errorf("cannot insert gauge\n%v", err)
 		}
 	}
 	for ckey, cvalue := range counter {
-		delta := int64(cvalue)
-		metric := metricsdto.Metrics{
-			ID:    ckey,
-			MType: "counter",
-			Delta: &delta}
-		_, err := counterStmt.ExecContext(ctx, metric.ID, delta)
+		_, err := counterStmt.ExecContext(ctx, ckey, int64(cvalue))
 		if err != nil {
 			return fmt.Errorf("cannot insert counter\n%v", err)
 		}
