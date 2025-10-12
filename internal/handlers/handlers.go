@@ -21,7 +21,7 @@ type serviceInt interface {
 	GetGauge(key string) (float64, error)
 	GetCounter(key string) (int, error)
 	GetAllMetrics() ([]string, []string, map[string]string)
-	PingDB(ctx context.Context) error
+	Ping(ctx context.Context) error
 }
 
 func NewHandlerService(service serviceInt, router *chi.Mux) *handlerService {
@@ -39,15 +39,15 @@ func (h *handlerService) CreateHandlers() {
 	h.router.Group(func(r chi.Router) {
 		r.Get("/", h.showAllMetrics)
 		r.Get("/value/{type}/{name}", h.GetMetrics)
-		r.Get("/ping", h.PingDB)
+		r.Get("/ping", h.Ping)
 		r.Post("/update/", h.PostJSON)
 		r.Post("/value/", h.GetJSON)
 		r.Post("/update/{type}/{name}/{value}", h.UpdateMetrics)
 	})
 }
 
-func (h *handlerService) PingDB(res http.ResponseWriter, req *http.Request) {
-	err := h.service.PingDB(req.Context())
+func (h *handlerService) Ping(res http.ResponseWriter, req *http.Request) {
+	err := h.service.Ping(req.Context())
 	if err != nil {
 		log.Printf("cannot ping db: %v", err)
 		http.Error(res, fmt.Sprintf("cannot ping db: %v", err), http.StatusInternalServerError)

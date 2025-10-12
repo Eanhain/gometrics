@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"gometrics/internal/api/metricsdto"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -21,31 +20,25 @@ type storage interface {
 }
 
 type persistStorage interface {
-	FormattingLogs(map[string]float64, map[string]int) error
-	ImportLogs() ([]metricsdto.Metrics, error)
-	GetFile() *os.File
+	FormattingLogs(context.Context, map[string]float64, map[string]int) error
+	ImportLogs(context.Context) ([]metricsdto.Metrics, error)
 	GetLoopTime() int
 	Close() error
 	Flush() error
-}
-
-type dbStorage interface {
-	PingDB(ctx context.Context) error
-	Close() error
+	Ping(ctx context.Context) error
 }
 
 type Service struct {
-	store     storage
-	pstore    persistStorage
-	dbStorage dbStorage
+	store  storage
+	pstore persistStorage
 }
 
-func NewService(inst storage, inst2 persistStorage, inst3 dbStorage) *Service {
-	return &Service{store: inst, pstore: inst2, dbStorage: inst3}
+func NewService(inst storage, inst2 persistStorage) *Service {
+	return &Service{store: inst, pstore: inst2}
 }
 
-func (s *Service) PingDB(ctx context.Context) error {
-	return s.dbStorage.PingDB(ctx)
+func (s *Service) Ping(ctx context.Context) error {
+	return s.pstore.Ping(ctx)
 }
 
 func (s *Service) GetGauge(key string) (float64, error) {
@@ -104,10 +97,10 @@ func (s *Service) GaugeInsert(key string, value float64) error {
 	if err := s.store.GaugeInsert(key, value); err != nil {
 		return fmt.Errorf("store gauge %s: %w", key, err)
 	}
-	if s.pstore.GetFile() != nil {
+	if s.pstore.Ping(context.Background()) == nil {
 		gauges := s.GetAllGauges()
 		counters := s.GetAllCounters()
-		if err := s.pstore.FormattingLogs(gauges, counters); err != nil {
+		if err := s.pstore.FormattingLogs(context.Background(), gauges, counters); err != nil {
 			return fmt.Errorf("persist gauge %s: %w", key, err)
 		}
 	}
@@ -119,10 +112,10 @@ func (s *Service) CounterInsert(key string, value int) error {
 	if err := s.store.CounterInsert(key, value); err != nil {
 		return fmt.Errorf("store counter %s: %w", key, err)
 	}
-	if s.pstore.GetFile() != nil {
+	if s.pstore.Ping(context.Background()) == nil {
 		gauges := s.GetAllGauges()
 		counters := s.GetAllCounters()
-		if err := s.pstore.FormattingLogs(gauges, counters); err != nil {
+		if err := s.pstore.FormattingLogs(context.Background(), gauges, counters); err != nil {
 			return fmt.Errorf("persist counter %s: %w", key, err)
 		}
 	}
@@ -134,7 +127,7 @@ func (s *Service) PersistRestore() error {
 	// if err != nil {
 	// 	return err
 	// }
-	metrics, err := s.pstore.ImportLogs()
+	metrics, err := s.pstore.ImportLogs(context.Background())
 	if err != nil {
 		return fmt.Errorf("import persisted metrics: %w", err)
 	}
@@ -165,13 +158,6 @@ func (s *Service) FromStructToStore(metric metricsdto.Metrics) error {
 func (s *Service) StorageCloser() error {
 	if err := s.pstore.Close(); err != nil {
 		return fmt.Errorf("close persist storage: %w", err)
-	}
-	return nil
-}
-
-func (s *Service) DBCloser() error {
-	if err := s.dbStorage.Close(); err != nil {
-		return fmt.Errorf("close db storage: %w", err)
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	myCompress "gometrics/internal/compress"
 	"gometrics/internal/db"
@@ -31,12 +32,17 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("init request logger: %w", err))
 	}
-	newLogger.Infoln("attempting DB connection %v", f.DatabaseDSN)
-	newDB, err := db.CreateConnection("postgres", f.DatabaseDSN)
+	newLogger.Infoln("attempting DB connection", f.DatabaseDSN)
+	newDB, err := db.CreateConnection(context.Background(), "postgres", f.DatabaseDSN)
+
+	var newService *service.Service
+
 	if err != nil {
-		newLogger.Errorf("DB conn error:\nReturn to file storage %v", err)
+		newLogger.Errorf("DB conn error, return to file storage %v", err)
+		newService = service.NewService(newStorage, pstore)
 	} else {
-		pstore = nil
+		newService = service.NewService(newStorage, newDB)
+		f.StoreInter = 0
 	}
 
 	newMux := chi.NewMux()
@@ -44,10 +50,7 @@ func main() {
 	newMux.Use(myCompress.GzipHandleReader)
 	newMux.Use(myCompress.GzipHandleWriter)
 
-	newService := service.NewService(newStorage, pstore, newDB)
-
 	defer newService.StorageCloser()
-	defer newService.DBCloser()
 
 	newHandler := handlers.NewHandlerService(newService, newMux)
 
@@ -55,7 +58,7 @@ func main() {
 
 	if f.Restore {
 		if err := newService.PersistRestore(); err != nil {
-			panic(fmt.Errorf("restore persisted metrics: %w", err))
+			newLogger.Warnln("restore persisted metrics: ", err)
 		}
 	}
 

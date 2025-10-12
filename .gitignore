@@ -26,3 +26,4 @@ vendor/
 .шпора
 
 /metrics_storage
+cmd/server/metrics_storage
