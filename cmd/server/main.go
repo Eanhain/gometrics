@@ -37,9 +37,11 @@ func main() {
 
 	var newService *service.Service
 
-	if err != nil {
-		newLogger.Errorf("DB conn error, return to file storage %v", err)
+	if f.DatabaseDSN == "" {
+		newLogger.Errorf("DB conn error, DatabaseDSN is empty, return to file storage %v", err)
 		newService = service.NewService(newStorage, pstore)
+	} else if err != nil {
+		panic(fmt.Errorf("cannot connect to postgres %v", err))
 	} else {
 		newService = service.NewService(newStorage, newDB)
 		f.StoreInter = 0
