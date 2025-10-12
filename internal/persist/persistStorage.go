@@ -161,8 +161,10 @@ func (pstorage *PersistStorage) ImportLogs(ctx context.Context) ([]metricsdto.Me
 
 func (pstorage *PersistStorage) Ping(ctx context.Context) error {
 	_, err := pstorage.file.Stat()
-
-	return fmt.Errorf("file not found\n%v", err)
+	if err != nil {
+		return fmt.Errorf("file not found\n%v", err)
+	}
+	return nil
 }
 
 func (pstorage *PersistStorage) GetLoopTime() int {
