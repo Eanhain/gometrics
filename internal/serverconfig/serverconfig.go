@@ -13,7 +13,7 @@ type ServerConfigs struct {
 	StoreInter  int       `env:"STORE_INTERVAL" envDefault:"300"`
 	FilePath    string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"`
 	Restore     bool      `env:"RESTORE" envDefault:"true"`
-	DatabaseDSN string    `env:"DATABASE_DSN" envDefault:"postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable"`
+	DatabaseDSN string    `env:"DATABASE_DSN" envDefault:""`
 }
 
 func (o *ServerConfigs) GetPort() string {

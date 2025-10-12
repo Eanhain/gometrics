@@ -10,7 +10,6 @@ import (
 	"gometrics/internal/serverconfig"
 	"gometrics/internal/service"
 	"gometrics/internal/storage"
-	"log"
 	"net/http"
 	"sync"
 
@@ -32,10 +31,12 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("init request logger: %w", err))
 	}
-	log.Printf("attempting DB connection %v", f.DatabaseDSN)
+	newLogger.Infoln("attempting DB connection %v", f.DatabaseDSN)
 	newDB, err := db.CreateConnection("postgres", f.DatabaseDSN)
 	if err != nil {
-		log.Fatalf("DB conn error:: %v", err)
+		newLogger.Errorf("DB conn error:\nReturn to file storage %v", err)
+	} else {
+		pstore = nil
 	}
 
 	newMux := chi.NewMux()
