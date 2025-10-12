@@ -10,8 +10,9 @@ import (
 )
 
 const initDDL = `
-CREATE SCHEMA IF NOT EXISTS mon;
-CREATE TABLE IF NOT EXISTS mon.metrics (
+// CREATE SCHEMA IF NOT EXISTS praktikum;
+
+CREATE TABLE IF NOT EXISTS metrics (
     ID      TEXT PRIMARY KEY,
     MType  TEXT NOT NULL,
     Delta   BIGINT,
@@ -51,7 +52,7 @@ func (s *DBStorage) Ping(ctx context.Context) error {
 func (db *DBStorage) ImportLogs(ctx context.Context) ([]metricsdto.Metrics, error) {
 	metrics := make([]metricsdto.Metrics, 0)
 
-	rows, err := db.QueryContext(ctx, "SELECT ID, MType, Delta, Value from mon.metrics")
+	rows, err := db.QueryContext(ctx, "SELECT ID, MType, Delta, Value from metrics")
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +109,7 @@ func (db *DBStorage) FormattingLogs(ctx context.Context, gauge map[string]float6
 	}()
 
 	gaugeStmt, err := tx.PrepareContext(ctx, `
-        INSERT INTO mon.metrics (ID, MType, Delta, Value)
+        INSERT INTO metrics (ID, MType, Delta, Value)
         VALUES ($1, 'gauge', NULL, $2)
         ON CONFLICT (id) DO UPDATE
         SET value = EXCLUDED.value, delta = NULL, UpdateAt = now();
@@ -119,7 +120,7 @@ func (db *DBStorage) FormattingLogs(ctx context.Context, gauge map[string]float6
 	}
 
 	counterStmt, err := tx.PrepareContext(ctx, `
-        INSERT INTO mon.metrics (ID, MType, Delta, Value)
+        INSERT INTO metrics (ID, MType, Delta, Value)
         VALUES ($1, 'counter', $2, NULL)
         ON CONFLICT (id) DO UPDATE
         SET delta = EXCLUDED.delta, value = NULL, UpdateAt = now();
