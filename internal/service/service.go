@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"gometrics/internal/api/metricsdto"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -42,7 +41,6 @@ func (s *Service) Ping(ctx context.Context) error {
 }
 
 func (s *Service) GetGauge(key string) (float64, error) {
-	key = strings.ToLower(key)
 	value, err := s.store.GetGauge(key)
 	if err != nil {
 		return 0, fmt.Errorf("get gauge %s: %w", key, err)
@@ -51,7 +49,6 @@ func (s *Service) GetGauge(key string) (float64, error) {
 }
 
 func (s *Service) GetCounter(key string) (int, error) {
-	key = strings.ToLower(key)
 	value, err := s.store.GetCounter(key)
 	if err != nil {
 		return 0, fmt.Errorf("get counter %s: %w", key, err)
