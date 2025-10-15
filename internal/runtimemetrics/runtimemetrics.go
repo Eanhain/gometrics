@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -21,6 +22,7 @@ import (
 )
 
 type runtimeUpdate struct {
+	mu         sync.RWMutex
 	service    serviceInt
 	memMetrics runtime.MemStats
 	client     *resty.Client
@@ -81,109 +83,109 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 	return nil
 }
 
-func (ru *runtimeUpdate) SendMetrics(ctx context.Context, timer *time.Timer, host string, port string, compress string) error {
+func (ru *runtimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, host string, port string, compress string) error {
 	var bufOut []byte
 	curl := fmt.Sprintf("http://%v%v/update/", host, port)
+	select {
+	case <-ticker.C:
+		req := ru.client.R().
+			SetHeader("Content-Type", "application/json")
+		ru.mu.RLock()
+		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics()
+		ru.mu.RUnlock()
+		for _, key := range keysGauge {
 
-	for {
-		select {
-		case <-timer.C:
-			req := ru.client.R().
-				SetHeader("Content-Type", "application/json")
-			keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics()
-			for _, key := range keysGauge {
+			valueString := metricMaps[key]
+			valueFloat, err := strconv.ParseFloat(valueString, 64)
 
-				valueString := metricMaps[key]
-				valueFloat, err := strconv.ParseFloat(valueString, 64)
-
-				if err != nil {
-					return err
-				}
-				metrics := metricsdto.Metrics{ID: key, MType: "gauge", Value: &valueFloat}
-				bufTemp, err := easyjson.Marshal(metrics)
-				if err != nil {
-					return err
-				}
-
-				switch compress {
-				case "gzip":
-					bufOut, err = myCompress.Compress(bufTemp)
-					if err != nil {
-						return err
-					}
-					req.
-						SetHeader("Accept-Encoding", "gzip").
-						SetHeader("Content-Encoding", "gzip")
-				case "false":
-					bufOut = bufTemp
-				default:
-					bufOut = bufTemp
-				}
-				_, err = req.
-					SetBody(bufOut).
-					Post(curl)
-				if err != nil {
-					log.Println("WARN: Can't connect to metrics server")
-				}
+			if err != nil {
+				return err
+			}
+			metrics := metricsdto.Metrics{ID: key, MType: "gauge", Value: &valueFloat}
+			bufTemp, err := easyjson.Marshal(metrics)
+			if err != nil {
+				return err
 			}
 
-			for _, key := range keysCounter {
-				value := metricMaps[key]
-				valueInt, err := strconv.Atoi(value)
-				int64Value := int64(valueInt)
+			switch compress {
+			case "gzip":
+				bufOut, err = myCompress.Compress(bufTemp)
 				if err != nil {
 					return err
 				}
-				metrics := metricsdto.Metrics{ID: key, MType: "counter", Delta: &int64Value}
-				bufTemp, err := easyjson.Marshal(metrics)
-				if err != nil {
-					return err
-				}
-				switch compress {
-				case "gzip":
-					bufOut, err = myCompress.Compress(bufTemp)
-					if err != nil {
-						return err
-					}
-					req.SetHeader("Accept-Encoding", "gzip").
-						SetHeader("Content-Encoding", "gzip")
-				case "false":
-					bufOut = bufTemp
-				default:
-					bufOut = bufTemp
-				}
-				_, err = req.
-					SetBody(bufOut).
-					Post(curl)
-				if err != nil {
-					log.Println("WARN: Can't connect to metrics server")
-				}
-
+				req.
+					SetHeader("Accept-Encoding", "gzip").
+					SetHeader("Content-Encoding", "gzip")
+			case "false":
+				bufOut = bufTemp
+			default:
+				bufOut = bufTemp
 			}
-		case <-ctx.Done():
-			return nil
-
+			_, err = req.
+				SetBody(bufOut).
+				Post(curl)
+			if err != nil {
+				log.Println("WARN: Can't connect to metrics server")
+			}
 		}
 
+		for _, key := range keysCounter {
+			value := metricMaps[key]
+			valueInt, err := strconv.Atoi(value)
+			int64Value := int64(valueInt)
+			if err != nil {
+				return err
+			}
+			metrics := metricsdto.Metrics{ID: key, MType: "counter", Delta: &int64Value}
+			bufTemp, err := easyjson.Marshal(metrics)
+			if err != nil {
+				return err
+			}
+			switch compress {
+			case "gzip":
+				bufOut, err = myCompress.Compress(bufTemp)
+				if err != nil {
+					return err
+				}
+				req.SetHeader("Accept-Encoding", "gzip").
+					SetHeader("Content-Encoding", "gzip")
+			case "false":
+				bufOut = bufTemp
+			default:
+				bufOut = bufTemp
+			}
+			_, err = req.
+				SetBody(bufOut).
+				Post(curl)
+			if err != nil {
+				log.Println("WARN: Can't connect to metrics server")
+			}
+
+		}
+	case <-ctx.Done():
+		return nil
+
 	}
+	return nil
 }
 
-func (ru *runtimeUpdate) GetMetrics(ctx context.Context, timer *time.Timer, metrics []string) error {
-	for {
-		select {
-		case <-timer.C:
-			if err := ru.FillRepo(metrics); err != nil {
-				return fmt.Errorf("collect runtime metrics: %w", err)
-			}
-			if err := ru.service.CounterInsert("PollCount", 1); err != nil {
-				return fmt.Errorf("update counter PollCount: %w", err)
-			}
-			if err := ru.service.GaugeInsert("RandomValue", rand.Float64()); err != nil {
-				return fmt.Errorf("update gauge RandomValue: %w", err)
-			}
-		case <-ctx.Done():
-			return nil
-		}
+func (ru *runtimeUpdate) GetMetrics(ctx context.Context, ticker *time.Ticker, metrics []string) error {
 
+	select {
+	case <-ticker.C:
+		ru.mu.Lock()
+		defer ru.mu.Unlock()
+		if err := ru.FillRepo(metrics); err != nil {
+			return fmt.Errorf("collect runtime metrics: %w", err)
+		}
+		if err := ru.service.CounterInsert("PollCount", 1); err != nil {
+			return fmt.Errorf("update counter PollCount: %w", err)
+		}
+		if err := ru.service.GaugeInsert("RandomValue", rand.Float64()); err != nil {
+			return fmt.Errorf("update gauge RandomValue: %w", err)
+		}
+	case <-ctx.Done():
+		return nil
 	}
+	return nil
 }

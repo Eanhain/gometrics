@@ -51,15 +51,17 @@ func main() {
 	f := clientconfig.InitialFlags()
 	f.ParseFlags()
 	ctx := context.Background()
+
+	defer ctx.Done()
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		timer := time.NewTimer(time.Duration(f.PollInterval) * time.Second)
-		defer timer.Stop()
+		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
+		defer ticker.Stop()
 		for {
-			if err := metricsGen.GetMetrics(ctx, timer, metrics); err != nil {
+			if err := metricsGen.GetMetrics(ctx, ticker, metrics); err != nil {
 				panic(fmt.Errorf("runtime metrics loop: %w", err))
 			}
 		}
@@ -67,10 +69,12 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		timer := time.NewTimer(time.Duration(f.PollInterval) * time.Second)
-		defer timer.Stop()
-		if err := metricsGen.SendMetrics(ctx, timer, f.GetHost(), f.GetPort(), f.Compress); err != nil {
-			panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
+		ticker := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
+		defer ticker.Stop()
+		for {
+			if err := metricsGen.SendMetrics(ctx, ticker, f.GetHost(), f.GetPort(), f.Compress); err != nil {
+				panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
+			}
 		}
 	}()
 
