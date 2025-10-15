@@ -153,6 +153,16 @@ func (s *Service) FromStructToStore(metric metricsdto.Metrics) error {
 	return nil
 }
 
+func (s *Service) FromStructToStoreBatch(metrics []metricsdto.Metrics) error {
+	for _, metric := range metrics {
+		err := s.FromStructToStore(metric)
+		if err != nil {
+			return fmt.Errorf("cannot write batch %s: %w", metric.ID, err)
+		}
+	}
+	return nil
+}
+
 func (s *Service) StorageCloser() error {
 	if err := s.pstore.Close(); err != nil {
 		return fmt.Errorf("close persist storage: %w", err)

@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	metricsdto "gometrics/internal/api/metricsdto"
 	"log"
 	"net/http"
 	"strconv"
+
+	"encoding/gob"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -22,6 +26,7 @@ type serviceInt interface {
 	GetCounter(key string) (int, error)
 	GetAllMetrics() ([]string, []string, map[string]string)
 	Ping(ctx context.Context) error
+	FromStructToStoreBatch(metrics []metricsdto.Metrics) error
 }
 
 func NewHandlerService(service serviceInt, router *chi.Mux) *handlerService {
@@ -41,9 +46,34 @@ func (h *handlerService) CreateHandlers() {
 		r.Get("/value/{type}/{name}", h.GetMetrics)
 		r.Get("/ping", h.Ping)
 		r.Post("/update/", h.PostJSON)
+		r.Post("/updates/", h.PostMetricsArray)
 		r.Post("/value/", h.GetJSON)
 		r.Post("/update/{type}/{name}/{value}", h.UpdateMetrics)
 	})
+}
+
+func (h *handlerService) PostMetricsArray(res http.ResponseWriter, req *http.Request) {
+	var metrics []metricsdto.Metrics
+	var returnBuf bytes.Buffer
+
+	res.Header().Set("Content-Type", "application/json")
+
+	decoder := gob.NewDecoder(req.Body)
+	err := decoder.Decode(&metrics)
+	if err != nil {
+		http.Error(res, fmt.Sprintf("failed to read request body with gob: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	buf := gob.NewEncoder(&returnBuf)
+	err = buf.Encode(metrics)
+	if err != nil {
+		http.Error(res, fmt.Sprintf("failed to write request body with gob: %v", err), http.StatusInternalServerError)
+		return
+	}
+	res.Write(returnBuf.Bytes())
+	h.service.FromStructToStoreBatch(metrics)
+	res.WriteHeader(http.StatusOK)
 }
 
 func (h *handlerService) Ping(res http.ResponseWriter, req *http.Request) {
