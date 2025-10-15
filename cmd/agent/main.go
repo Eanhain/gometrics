@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"gometrics/internal/clientconfig"
 	"gometrics/internal/persist"
@@ -8,6 +9,7 @@ import (
 	"gometrics/internal/service"
 	"gometrics/internal/storage"
 	"sync"
+	"time"
 )
 
 func main() {
@@ -48,20 +50,26 @@ func main() {
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newService)
 	f := clientconfig.InitialFlags()
 	f.ParseFlags()
-
+	ctx := context.Background()
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		if err := metricsGen.GetLoopMetrics(f.PollInterval, metrics); err != nil {
-			panic(fmt.Errorf("runtime metrics loop: %w", err))
+		timer := time.NewTimer(time.Duration(f.PollInterval) * time.Second)
+		defer timer.Stop()
+		for {
+			if err := metricsGen.GetMetrics(ctx, timer, metrics); err != nil {
+				panic(fmt.Errorf("runtime metrics loop: %w", err))
+			}
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if err := metricsGen.SendMetrics(f.GetHost(), f.GetPort(), f.ReportInterval, f.Compress); err != nil {
+		timer := time.NewTimer(time.Duration(f.PollInterval) * time.Second)
+		defer timer.Stop()
+		if err := metricsGen.SendMetrics(ctx, timer, f.GetHost(), f.GetPort(), f.Compress); err != nil {
 			panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
 		}
 	}()
