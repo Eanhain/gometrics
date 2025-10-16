@@ -72,7 +72,7 @@ func main() {
 		ticker := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
 		defer ticker.Stop()
 		for {
-			if err := metricsGen.SendMetrics(ctx, ticker, f.GetHost(), f.GetPort(), f.Compress); err != nil {
+			if err := metricsGen.SendMetricsGob(ctx, ticker, f.GetHost(), f.GetPort(), f.Compress); err != nil {
 				panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
 			}
 		}

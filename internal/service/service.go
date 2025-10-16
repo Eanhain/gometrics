@@ -140,10 +140,18 @@ func (s *Service) PersistRestore() error {
 func (s *Service) FromStructToStore(metric metricsdto.Metrics) error {
 	switch metric.MType {
 	case "gauge":
+		if metric.Value == nil {
+			value := float64(0)
+			metric.Value = &value
+		}
 		if err := s.GaugeInsert(metric.ID, *metric.Value); err != nil {
 			return fmt.Errorf("insert gauge %s: %w", metric.ID, err)
 		}
 	case "counter":
+		if metric.Delta == nil {
+			value := int64(0)
+			metric.Delta = &value
+		}
 		if err := s.CounterInsert(metric.ID, int(*metric.Delta)); err != nil {
 			return fmt.Errorf("insert counter %s: %w", metric.ID, err)
 		}
@@ -154,6 +162,7 @@ func (s *Service) FromStructToStore(metric metricsdto.Metrics) error {
 }
 
 func (s *Service) FromStructToStoreBatch(metrics []metricsdto.Metrics) error {
+	// fmt.Println(metrics)
 	for _, metric := range metrics {
 		err := s.FromStructToStore(metric)
 		if err != nil {

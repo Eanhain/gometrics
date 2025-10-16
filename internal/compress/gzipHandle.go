@@ -42,7 +42,8 @@ func GzipHandleWriter(next http.Handler) http.Handler {
 		// на составные части, чтобы избежать неожиданных результатов
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") &&
 			!(strings.Contains(r.Header.Get("Content-Type"), "text/html") ||
-				strings.Contains(r.Header.Get("Content-Type"), "application/json")) {
+				strings.Contains(r.Header.Get("Content-Type"), "application/json") ||
+				strings.Contains(r.Header.Get("Content-Type"), "application/x-gob")) {
 			// если gzip не поддерживается, передаём управление
 			// дальше без изменений
 			next.ServeHTTP(w, r)

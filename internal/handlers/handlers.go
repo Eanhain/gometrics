@@ -56,7 +56,7 @@ func (h *handlerService) PostMetricsArray(res http.ResponseWriter, req *http.Req
 	var metrics []metricsdto.Metrics
 	var returnBuf bytes.Buffer
 
-	res.Header().Set("Content-Type", "application/json")
+	res.Header().Set("Content-Type", "application/x-gob")
 
 	decoder := gob.NewDecoder(req.Body)
 	err := decoder.Decode(&metrics)
