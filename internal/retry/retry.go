@@ -130,8 +130,7 @@ func defaultShouldRetry(err error) bool {
 	}
 
 	errMsg := err.Error()
-	if strings.Contains(errMsg, "connection refused") ||
-		strings.Contains(errMsg, "connection reset") ||
+	if strings.Contains(errMsg, "connection reset") ||
 		strings.Contains(errMsg, "no such host") {
 		return true
 	}
