@@ -106,3 +106,36 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 	res.Write(out)
 
 }
+
+func (h *handlerService) PostArrayJSON(res http.ResponseWriter, req *http.Request) {
+	var metrics metricsdto.MetricsArray
+	var returnBuf bytes.Buffer
+
+	res.Header().Set("Content-Type", "application/json")
+	// читаем тело запроса
+	_, err := returnBuf.ReadFrom(req.Body)
+	if err != nil {
+		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusInternalServerError)
+		return
+	}
+	// десериализуем JSON в Metrics
+	if err = easyjson.Unmarshal(returnBuf.Bytes(), &metrics); err != nil {
+		http.Error(res, fmt.Sprintf("failed to decode metric: %v", err), http.StatusBadRequest)
+		return
+	}
+	res.Write(returnBuf.Bytes())
+
+	err = h.service.FromStructToStoreBatch(metrics)
+	if err != nil {
+		http.Error(res, fmt.Sprintf("failed to write request body: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	out, err := easyjson.Marshal(metrics)
+	if err != nil {
+		http.Error(res, fmt.Sprintf("cannot marshal metric: %v", err), http.StatusInternalServerError)
+		return
+	}
+	res.WriteHeader(http.StatusOK)
+	res.Write(out)
+}

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"encoding/gob"
 
@@ -46,10 +47,20 @@ func (h *handlerService) CreateHandlers() {
 		r.Get("/value/{type}/{name}", h.GetMetrics)
 		r.Get("/ping", h.Ping)
 		r.Post("/update/", h.PostJSON)
-		r.Post("/updates/", h.PostMetricsArray)
+		r.Post("/updates/", h.PostMetrics)
 		r.Post("/value/", h.GetJSON)
 		r.Post("/update/{type}/{name}/{value}", h.UpdateMetrics)
 	})
+}
+
+func (h *handlerService) PostMetrics(res http.ResponseWriter, req *http.Request) {
+	if strings.Contains(req.Header.Get("Content-Type"), "application/json") {
+		h.PostArrayJSON(res, req)
+		return
+	} else if strings.Contains(req.Header.Get("Content-Type"), "application/x-gob") {
+		h.PostMetricsArray(res, req)
+		return
+	}
 }
 
 func (h *handlerService) PostMetricsArray(res http.ResponseWriter, req *http.Request) {
@@ -72,7 +83,11 @@ func (h *handlerService) PostMetricsArray(res http.ResponseWriter, req *http.Req
 		return
 	}
 	res.Write(returnBuf.Bytes())
-	h.service.FromStructToStoreBatch(metrics)
+	err = h.service.FromStructToStoreBatch(metrics)
+	if err != nil {
+		http.Error(res, fmt.Sprintf("failed to write request body: %v", err), http.StatusInternalServerError)
+		return
+	}
 	res.WriteHeader(http.StatusOK)
 }
 
