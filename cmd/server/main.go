@@ -51,8 +51,9 @@ func main() {
 		}, "postgres", f.DatabaseDSN)
 
 		if connErr != nil {
-			newLogger.Errorf("DB conn error, return to file storage %v", connErr)
-		} else if dbResult != nil {
+			panic(fmt.Errorf("DB conn error %v", connErr))
+		}
+		if dbResult != nil {
 			dbStore, _ = dbResult.(*db.DBStorage)
 			if dbStore != nil {
 				f.StoreInter = 0
