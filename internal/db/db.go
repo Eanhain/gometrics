@@ -35,12 +35,25 @@ func CreateConnection(ctx context.Context, dbType, connectionString string) (*DB
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
+	tx, err := db.BeginTx(ctx, nil)
+
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				err = fmt.Errorf("rollback failed: %v (original err: %w)", rbErr, err)
+			}
+		}
+	}()
+
 	if _, err := db.ExecContext(ctx, initDDL); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
 
-	return &DBStorage{db, 0}, nil
+	return &DBStorage{db, 0}, tx.Commit()
 }
 
 func (db *DBStorage) Ping(ctx context.Context) error {
