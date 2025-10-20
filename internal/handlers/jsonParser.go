@@ -18,7 +18,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	// читаем тело запроса
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
-		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
 		return
 	}
 	// десериализуем JSON в Metrics
@@ -67,7 +67,7 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 	// читаем тело запроса
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
-		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
 		return
 	}
 	// десериализуем JSON в Metrics
@@ -115,7 +115,7 @@ func (h *handlerService) PostArrayJSON(res http.ResponseWriter, req *http.Reques
 	// читаем тело запроса
 	_, err := returnBuf.ReadFrom(req.Body)
 	if err != nil {
-		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusInternalServerError)
+		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
 		return
 	}
 	// десериализуем JSON в Metrics
