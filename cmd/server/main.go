@@ -92,7 +92,7 @@ func main() {
 	newHandler := handlers.NewHandlerService(newService, newMux)
 
 	if f.Restore {
-		if err := newService.PersistRestore(); err != nil {
+		if err := newService.PersistRestore(ctx); err != nil {
 			newLogger.Warnln("restore persisted metrics: ", err)
 		}
 	}

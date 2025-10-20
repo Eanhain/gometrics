@@ -19,14 +19,17 @@ func TestCreateConnection(t *testing.T) {
 	})
 
 	mock.ExpectPing()
-	mock.ExpectExec(regexp.QuoteMeta(initDDL)).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectClose()
 
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(initDDL)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
 	conn, err := CreateConnection(context.Background(), "sqlmock", dsn)
+
 	require.NoError(t, err)
 	require.NotNil(t, conn)
 
-	require.NoError(t, conn.Close())
+	mock.ExpectClose()
+	conn.Close()
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

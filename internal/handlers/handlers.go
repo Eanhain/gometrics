@@ -21,13 +21,13 @@ type handlerService struct {
 }
 
 type serviceInt interface {
-	GaugeInsert(key string, value float64) error
-	CounterInsert(key string, value int) error
-	GetGauge(key string) (float64, error)
-	GetCounter(key string) (int, error)
-	GetAllMetrics() ([]string, []string, map[string]string)
+	GaugeInsert(ctx context.Context, key string, value float64) error
+	CounterInsert(ctx context.Context, key string, value int) error
+	GetGauge(ctx context.Context, key string) (float64, error)
+	GetCounter(ctx context.Context, key string) (int, error)
+	GetAllMetrics(ctx context.Context) ([]string, []string, map[string]string)
 	Ping(ctx context.Context) error
-	FromStructToStoreBatch(metrics []metricsdto.Metrics) error
+	FromStructToStoreBatch(ctx context.Context, metrics []metricsdto.Metrics) error
 }
 
 func NewHandlerService(service serviceInt, router *chi.Mux) *handlerService {
@@ -83,7 +83,7 @@ func (h *handlerService) PostMetricsArray(res http.ResponseWriter, req *http.Req
 		return
 	}
 	res.Write(returnBuf.Bytes())
-	err = h.service.FromStructToStoreBatch(metrics)
+	err = h.service.FromStructToStoreBatch(req.Context(), metrics)
 	if err != nil {
 		http.Error(res, fmt.Sprintf("failed to write request body: %v", err), http.StatusInternalServerError)
 		return
@@ -102,7 +102,7 @@ func (h *handlerService) Ping(res http.ResponseWriter, req *http.Request) {
 }
 
 func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
-	keysGauge, keysCounter, metrics := h.service.GetAllMetrics()
+	keysGauge, keysCounter, metrics := h.service.GetAllMetrics(req.Context())
 	keys := append(keysGauge, keysCounter...)
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	format := "%s: %s<br>"
@@ -121,7 +121,7 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 	format := "%v"
 	switch typeMetric {
 	case "gauge":
-		value, err := h.service.GetGauge(nameMetric)
+		value, err := h.service.GetGauge(req.Context(), nameMetric)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("gauge metric not found: %v", err), http.StatusNotFound)
 			return
@@ -132,7 +132,7 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 		}
 		res.WriteHeader(http.StatusOK)
 	case "counter":
-		value, err := h.service.GetCounter(nameMetric)
+		value, err := h.service.GetCounter(req.Context(), nameMetric)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("counter metric not found: %v", err), http.StatusNotFound)
 			return
@@ -159,7 +159,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 			http.Error(res, fmt.Sprintf("could not parse gauge metric: %v", err), http.StatusBadRequest)
 			return
 		}
-		err = h.service.GaugeInsert(nameMetric, value)
+		err = h.service.GaugeInsert(req.Context(), nameMetric, value)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("could not insert gauge metric: %v", err), http.StatusBadRequest)
 			return
@@ -171,7 +171,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 			http.Error(res, fmt.Sprintf("could not parse counter metric: %v", err), http.StatusBadRequest)
 			return
 		}
-		err = h.service.CounterInsert(nameMetric, value)
+		err = h.service.CounterInsert(req.Context(), nameMetric, value)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("could not insert counter metric: %v", err), http.StatusBadRequest)
 			return

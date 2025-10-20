@@ -107,6 +107,7 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			},
 		},
 	}
+	ctx := context.Background()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, ins := range tt.args {
@@ -114,14 +115,14 @@ func Test_service_GetAllMetrics(t *testing.T) {
 				case "gauge":
 					valueFloat, err := strconv.ParseFloat(ins.rawValue, 64)
 					require.NoError(t, err)
-					tt.service.GaugeInsert(ins.key, valueFloat)
+					tt.service.GaugeInsert(ctx, ins.key, valueFloat)
 				case "counter":
 					valueInt64, err := strconv.Atoi(ins.rawValue)
 					require.NoError(t, err)
-					tt.service.CounterInsert(ins.key, valueInt64)
+					tt.service.CounterInsert(ctx, ins.key, valueInt64)
 				}
 			}
-			gauge, counter, res := tt.service.GetAllMetrics()
+			gauge, counter, res := tt.service.GetAllMetrics(ctx)
 			got := want{gaugeKeys: gauge, counterKeys: counter, result: res}
 			boolRes := assert.Equal(t, got, tt.want)
 			if !boolRes {

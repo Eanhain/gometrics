@@ -31,11 +31,11 @@ type runtimeUpdate struct {
 }
 
 type serviceInt interface {
-	GaugeInsert(key string, value float64) error
-	CounterInsert(key string, value int) error
-	GetAllMetrics() ([]string, []string, map[string]string)
-	GetGauge(key string) (float64, error)
-	GetCounter(key string) (int, error)
+	GaugeInsert(ctx context.Context, key string, value float64) error
+	CounterInsert(ctx context.Context, key string, value int) error
+	GetAllMetrics(ctx context.Context) ([]string, []string, map[string]string)
+	GetGauge(ctx context.Context, key string) (float64, error)
+	GetCounter(ctx context.Context, key string) (int, error)
 }
 
 func NewRuntimeUpdater(service serviceInt) *runtimeUpdate {
@@ -64,7 +64,7 @@ func (ru *runtimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
 
 }
 
-func (ru *runtimeUpdate) FillRepo(metrics []string) error {
+func (ru *runtimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 	runtime.ReadMemStats(&ru.memMetrics)
 	v := reflect.ValueOf(ru.memMetrics)
 	for _, metricName := range metrics {
@@ -77,7 +77,7 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 		if err != nil {
 			return err
 		}
-		err = ru.service.GaugeInsert(strings.ToLower(metricName), value)
+		err = ru.service.GaugeInsert(ctx, strings.ToLower(metricName), value)
 		if err != nil {
 			return err
 		}
@@ -125,7 +125,7 @@ func (ru *runtimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker
 	select {
 	case <-ticker.C:
 		ru.mu.RLock()
-		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics()
+		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics(ctx)
 		ru.mu.RUnlock()
 
 		req := ru.client.R().
@@ -223,7 +223,7 @@ func (ru *runtimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, h
 	select {
 	case <-ticker.C:
 		ru.mu.RLock()
-		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics()
+		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics(ctx)
 		ru.mu.RUnlock()
 
 		req := ru.client.R().
@@ -311,13 +311,13 @@ func (ru *runtimeUpdate) GetMetrics(ctx context.Context, ticker *time.Ticker, me
 	case <-ticker.C:
 		ru.mu.Lock()
 		defer ru.mu.Unlock()
-		if err := ru.FillRepo(metrics); err != nil {
+		if err := ru.FillRepo(ctx, metrics); err != nil {
 			return fmt.Errorf("collect runtime metrics: %w", err)
 		}
-		if err := ru.service.CounterInsert("PollCount", 1); err != nil {
+		if err := ru.service.CounterInsert(ctx, "PollCount", 1); err != nil {
 			return fmt.Errorf("update counter PollCount: %w", err)
 		}
-		if err := ru.service.GaugeInsert("RandomValue", rand.Float64()); err != nil {
+		if err := ru.service.GaugeInsert(ctx, "RandomValue", rand.Float64()); err != nil {
 			return fmt.Errorf("update gauge RandomValue: %w", err)
 		}
 	case <-ctx.Done():

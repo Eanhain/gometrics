@@ -58,7 +58,7 @@ func Test_runtimeUpdate_FillRepo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.ru.FillRepo(tt.args.metrics)
+			err := tt.ru.FillRepo(context.Background(), tt.args.metrics)
 			if tt.wantErr == nil {
 				assert.Nil(t, err)
 			} else {
