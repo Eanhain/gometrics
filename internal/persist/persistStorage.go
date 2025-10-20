@@ -3,6 +3,7 @@ package persist
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,13 +52,13 @@ func NewPersistStorage(dirPath string, storeInter int) (*PersistStorage, error) 
 	return pstorage, nil
 }
 
-func (pstorage *PersistStorage) FormattingLogs(gauge map[string]float64, counter map[string]int) error {
+func (pstorage *PersistStorage) FormattingLogs(ctx context.Context, gauge map[string]float64, counter map[string]int) error {
 	var metrics []metricsdto.Metrics
 	for gkey, gvalue := range gauge {
 		value := gvalue
 		metric := metricsdto.Metrics{
 			ID:    gkey,
-			MType: "gauge",
+			MType: metricsdto.MetricTypeGauge,
 			Value: &value}
 		metrics = append(metrics, metric)
 	}
@@ -65,7 +66,7 @@ func (pstorage *PersistStorage) FormattingLogs(gauge map[string]float64, counter
 		delta := int64(cvalue)
 		metric := metricsdto.Metrics{
 			ID:    ckey,
-			MType: "counter",
+			MType: metricsdto.MetricTypeCounter,
 			Delta: &delta}
 		metrics = append(metrics, metric)
 	}
@@ -121,7 +122,7 @@ func (pstorage *PersistStorage) WriteLogs(logs []metricsdto.Metrics) error {
 	return err
 }
 
-func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
+func (pstorage *PersistStorage) ImportLogs(ctx context.Context) ([]metricsdto.Metrics, error) {
 
 	var token []metricsdto.Metrics
 	if pstorage.file == nil {
@@ -158,8 +159,12 @@ func (pstorage *PersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
 	return token, nil
 }
 
-func (pstorage *PersistStorage) GetFile() *os.File {
-	return pstorage.file
+func (pstorage *PersistStorage) Ping(ctx context.Context) error {
+	_, err := pstorage.file.Stat()
+	if err != nil {
+		return fmt.Errorf("file not found\n%v", err)
+	}
+	return nil
 }
 
 func (pstorage *PersistStorage) GetLoopTime() int {

@@ -1,7 +1,7 @@
 package service
 
 import (
-	"os"
+	"context"
 	"strconv"
 	"testing"
 
@@ -14,18 +14,18 @@ import (
 
 type stubPersistStorage struct{}
 
-func (s *stubPersistStorage) GaugeInsert(string, float64) error { return nil }
-func (s *stubPersistStorage) CounterInsert(string, int) error   { return nil }
-func (s *stubPersistStorage) FormattingLogs(map[string]float64, map[string]int) error {
+func (s *stubPersistStorage) FormattingLogs(_ context.Context, _ map[string]float64, _ map[string]int) error {
 	return nil
 }
-func (s *stubPersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
+func (s *stubPersistStorage) ImportLogs(context.Context) ([]metricsdto.Metrics, error) {
 	return nil, nil
 }
-func (s *stubPersistStorage) GetFile() *os.File { return nil }
-func (s *stubPersistStorage) GetLoopTime() int  { return 0 }
-func (s *stubPersistStorage) Close() error      { return nil }
-func (s *stubPersistStorage) Flush() error      { return nil }
+func (s *stubPersistStorage) GetLoopTime() int { return 0 }
+func (s *stubPersistStorage) Close() error     { return nil }
+func (s *stubPersistStorage) Flush() error     { return nil }
+func (s *stubPersistStorage) Ping(context.Context) error {
+	return nil
+}
 
 func Test_service_GetAllMetrics(t *testing.T) {
 	type args struct {
@@ -48,12 +48,12 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			name:    "Test insert & get metrics",
 			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
 			args: []args{
-				{key: "g1", rawValue: "1", valueType: "gauge"},
-				{key: "g2", rawValue: "2", valueType: "gauge"},
-				{key: "g3", rawValue: "3", valueType: "gauge"},
-				{key: "c1", rawValue: "1", valueType: "counter"},
-				{key: "c2", rawValue: "2", valueType: "counter"},
-				{key: "c3", rawValue: "3", valueType: "counter"},
+				{key: "g1", rawValue: "1", valueType: metricsdto.MetricTypeGauge},
+				{key: "g2", rawValue: "2", valueType: metricsdto.MetricTypeGauge},
+				{key: "g3", rawValue: "3", valueType: metricsdto.MetricTypeGauge},
+				{key: "c1", rawValue: "1", valueType: metricsdto.MetricTypeCounter},
+				{key: "c2", rawValue: "2", valueType: metricsdto.MetricTypeCounter},
+				{key: "c3", rawValue: "3", valueType: metricsdto.MetricTypeCounter},
 			},
 			want: want{
 				gaugeKeys:   []string{"g1", "g2", "g3"},
@@ -78,9 +78,9 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			name:    "Only gauge",
 			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
 			args: []args{
-				{key: "g1", rawValue: "1", valueType: "gauge"},
-				{key: "g2", rawValue: "2", valueType: "gauge"},
-				{key: "g3", rawValue: "3", valueType: "gauge"},
+				{key: "g1", rawValue: "1", valueType: metricsdto.MetricTypeGauge},
+				{key: "g2", rawValue: "2", valueType: metricsdto.MetricTypeGauge},
+				{key: "g3", rawValue: "3", valueType: metricsdto.MetricTypeGauge},
 			},
 			want: want{
 				counterKeys: []string{},
@@ -94,9 +94,9 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			name:    "Only counter",
 			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
 			args: []args{
-				{key: "c1", rawValue: "1", valueType: "counter"},
-				{key: "c2", rawValue: "2", valueType: "counter"},
-				{key: "c3", rawValue: "3", valueType: "counter"},
+				{key: "c1", rawValue: "1", valueType: metricsdto.MetricTypeCounter},
+				{key: "c2", rawValue: "2", valueType: metricsdto.MetricTypeCounter},
+				{key: "c3", rawValue: "3", valueType: metricsdto.MetricTypeCounter},
 			},
 			want: want{
 				gaugeKeys:   []string{},
@@ -107,21 +107,22 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			},
 		},
 	}
+	ctx := context.Background()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, ins := range tt.args {
 				switch ins.valueType {
-				case "gauge":
+				case metricsdto.MetricTypeGauge:
 					valueFloat, err := strconv.ParseFloat(ins.rawValue, 64)
 					require.NoError(t, err)
-					tt.service.GaugeInsert(ins.key, valueFloat)
-				case "counter":
+					tt.service.GaugeInsert(ctx, ins.key, valueFloat)
+				case metricsdto.MetricTypeCounter:
 					valueInt64, err := strconv.Atoi(ins.rawValue)
 					require.NoError(t, err)
-					tt.service.CounterInsert(ins.key, valueInt64)
+					tt.service.CounterInsert(ctx, ins.key, valueInt64)
 				}
 			}
-			gauge, counter, res := tt.service.GetAllMetrics()
+			gauge, counter, res := tt.service.GetAllMetrics(ctx)
 			got := want{gaugeKeys: gauge, counterKeys: counter, result: res}
 			boolRes := assert.Equal(t, got, tt.want)
 			if !boolRes {

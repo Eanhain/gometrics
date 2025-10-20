@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	dto "gometrics/internal/api/metricsdto"
@@ -20,18 +20,18 @@ import (
 
 type stubPersistStorage struct{}
 
-func (s *stubPersistStorage) GaugeInsert(string, float64) error { return nil }
-func (s *stubPersistStorage) CounterInsert(string, int) error   { return nil }
-func (s *stubPersistStorage) FormattingLogs(map[string]float64, map[string]int) error {
+func (s *stubPersistStorage) FormattingLogs(context.Context, map[string]float64, map[string]int) error {
 	return nil
 }
-func (s *stubPersistStorage) ImportLogs() ([]dto.Metrics, error) {
+func (s *stubPersistStorage) ImportLogs(context.Context) ([]dto.Metrics, error) {
 	return nil, nil
 }
-func (s *stubPersistStorage) GetFile() *os.File { return nil }
-func (s *stubPersistStorage) GetLoopTime() int  { return 0 }
-func (s *stubPersistStorage) Close() error      { return nil }
-func (s *stubPersistStorage) Flush() error      { return nil }
+func (s *stubPersistStorage) GetLoopTime() int { return 0 }
+func (s *stubPersistStorage) Close() error     { return nil }
+func (s *stubPersistStorage) Flush() error     { return nil }
+func (s *stubPersistStorage) Ping(context.Context) error {
+	return nil
+}
 
 func testRequest(t *testing.T, ts *httptest.Server, method,
 	path string) (*http.Response, string) {
@@ -168,32 +168,32 @@ func Test_handlerService_JsonInsert(t *testing.T) {
 			value: []dto.Metrics{
 				{
 					ID:    "g1",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f1,
 				},
 				{
 					ID:    "g2",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f2,
 				},
 				{
 					ID:    "g3",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f3,
 				},
 				{
 					ID:    "c1",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i1,
 				},
 				{
 					ID:    "c2",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i2,
 				},
 				{
 					ID:    "c3",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i3,
 				},
 			},
@@ -236,58 +236,58 @@ func Test_handlerService_JsonGet(t *testing.T) {
 			req: []dto.Metrics{
 				{
 					ID:    "g1",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 				},
 				{
 					ID:    "g2",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 				},
 				{
 					ID:    "g3",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 				},
 				{
 					ID:    "c1",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 				},
 				{
 					ID:    "c2",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 				},
 				{
 					ID:    "c3",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 				},
 			},
 			expect: []dto.Metrics{
 				{
 					ID:    "g1",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f1,
 				},
 				{
 					ID:    "g2",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f2,
 				},
 				{
 					ID:    "g3",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f3,
 				},
 				{
 					ID:    "c1",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i1,
 				},
 				{
 					ID:    "c2",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i2,
 				},
 				{
 					ID:    "c3",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i3,
 				},
 			},

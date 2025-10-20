@@ -23,5 +23,7 @@ vendor/
 # IDEs directories
 .idea
 .vscode
+.шпора
 
 /metrics_storage
+cmd/server/metrics_storage

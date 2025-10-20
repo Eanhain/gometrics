@@ -1,6 +1,9 @@
 package runtimemetrics
 
 import (
+	"bytes"
+	"context"
+	"encoding/gob"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -8,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -20,17 +24,18 @@ import (
 )
 
 type runtimeUpdate struct {
+	mu         sync.RWMutex
 	service    serviceInt
 	memMetrics runtime.MemStats
 	client     *resty.Client
 }
 
 type serviceInt interface {
-	GaugeInsert(key string, value float64) error
-	CounterInsert(key string, value int) error
-	GetAllMetrics() ([]string, []string, map[string]string)
-	GetGauge(key string) (float64, error)
-	GetCounter(key string) (int, error)
+	GaugeInsert(ctx context.Context, key string, value float64) error
+	CounterInsert(ctx context.Context, key string, value int) error
+	GetAllMetrics(ctx context.Context) ([]string, []string, map[string]string)
+	GetGauge(ctx context.Context, key string) (float64, error)
+	GetCounter(ctx context.Context, key string) (int, error)
 }
 
 func NewRuntimeUpdater(service serviceInt) *runtimeUpdate {
@@ -59,7 +64,7 @@ func (ru *runtimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
 
 }
 
-func (ru *runtimeUpdate) FillRepo(metrics []string) error {
+func (ru *runtimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 	runtime.ReadMemStats(&ru.memMetrics)
 	v := reflect.ValueOf(ru.memMetrics)
 	for _, metricName := range metrics {
@@ -72,7 +77,7 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 		if err != nil {
 			return err
 		}
-		err = ru.service.GaugeInsert(strings.ToLower(metricName), value)
+		err = ru.service.GaugeInsert(ctx, strings.ToLower(metricName), value)
 		if err != nil {
 			return err
 		}
@@ -80,15 +85,150 @@ func (ru *runtimeUpdate) FillRepo(metrics []string) error {
 	return nil
 }
 
-func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, compress string) error {
-	sendTimeDuration := time.Duration(sendTime)
+func (ru *runtimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
+	for _, key := range keys {
+		value := metrics[key]
+		valueFloat, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return []metricsdto.Metrics{}, err
+		}
+		metric := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeGauge, Value: &valueFloat}
+		output = append(output, metric)
+	}
+	return output, nil
+}
+
+func (ru *runtimeUpdate) AddCounter(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
+	for _, key := range keys {
+		value := metrics[key]
+
+		valueInt, err := strconv.Atoi(value)
+		int64Value := int64(valueInt)
+		if err != nil {
+			return []metricsdto.Metrics{}, err
+		}
+		metric := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeCounter, Delta: &int64Value}
+		output = append(output, metric)
+	}
+	return output, nil
+}
+
+func (ru *runtimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker, host string, port string, compress string) error {
+	var (
+		bufOut          []byte
+		metrics         []metricsdto.Metrics
+		wg              sync.WaitGroup
+		keysCounterIter []string
+		keysGaugeIter   []string
+	)
+	curl := fmt.Sprintf("http://%v%v/updates/", host, port)
+	select {
+	case <-ticker.C:
+		ru.mu.RLock()
+		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics(ctx)
+		ru.mu.RUnlock()
+
+		req := ru.client.R().
+			SetHeader("Content-Type", "application/x-gob")
+		i := 10
+
+		for {
+			metrics = []metricsdto.Metrics{}
+			if len(keysCounter) <= i && len(keysCounter) > i-10 {
+				keysCounterIter = keysCounter[i-10:]
+			} else if i-10 >= len(keysCounter) {
+				keysCounterIter = []string{}
+			} else {
+				keysCounterIter = keysCounter[i-10 : i]
+			}
+
+			if len(keysGauge) <= i && len(keysGauge) > i-10 {
+				keysGaugeIter = keysGauge[i-10:]
+			} else if i-10 >= len(keysGauge) {
+				keysGaugeIter = []string{}
+			} else {
+				keysGaugeIter = keysGauge[i-10 : i]
+			}
+
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				counters, err := ru.AddCounter(keysCounterIter, metricMaps)
+				if err != nil {
+					panic(fmt.Errorf("error with SendMetricsGob %v", err))
+				}
+				ru.mu.Lock()
+				metrics = append(metrics, counters...)
+				ru.mu.Unlock()
+			}()
+
+			go func() {
+				defer wg.Done()
+				gauges, err := ru.AddGauge(keysGaugeIter, metricMaps)
+				if err != nil {
+					panic(fmt.Errorf("error with SendMetricsGob %v", err))
+				}
+				ru.mu.Lock()
+				metrics = append(metrics, gauges...)
+				ru.mu.Unlock()
+			}()
+
+			wg.Wait()
+			if len(metrics) > 0 {
+				var newBuffer bytes.Buffer
+				encoder := gob.NewEncoder(&newBuffer)
+				err := encoder.Encode(metrics)
+				newBufferBytes := newBuffer.Bytes()
+				if err != nil {
+					return err
+				}
+				switch compress {
+				case "gzip":
+					bufOut, err = myCompress.Compress(newBufferBytes)
+					if err != nil {
+						return err
+					}
+					req.
+						SetHeader("Accept-Encoding", "gzip").
+						SetHeader("Content-Encoding", "gzip")
+				case "false":
+					bufOut = newBufferBytes
+				default:
+					bufOut = newBufferBytes
+				}
+				_, err = req.
+					SetBody(bufOut).
+					Post(curl)
+				if err != nil {
+					log.Println("WARN: Can't connect to metrics server")
+				}
+			}
+			if i >= len(metricMaps) {
+				break
+			}
+			i += 10
+
+		}
+
+	case <-ctx.Done():
+		return nil
+
+	}
+	return nil
+}
+
+func (ru *runtimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, host string, port string, compress string) error {
 	var bufOut []byte
 	curl := fmt.Sprintf("http://%v%v/update/", host, port)
+	select {
+	case <-ticker.C:
+		ru.mu.RLock()
+		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics(ctx)
+		ru.mu.RUnlock()
 
-	for {
 		req := ru.client.R().
 			SetHeader("Content-Type", "application/json")
-		keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics()
+
 		for _, key := range keysGauge {
 
 			valueString := metricMaps[key]
@@ -97,7 +237,7 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, com
 			if err != nil {
 				return err
 			}
-			metrics := metricsdto.Metrics{ID: key, MType: "gauge", Value: &valueFloat}
+			metrics := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeGauge, Value: &valueFloat}
 			bufTemp, err := easyjson.Marshal(metrics)
 			if err != nil {
 				return err
@@ -132,7 +272,7 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, com
 			if err != nil {
 				return err
 			}
-			metrics := metricsdto.Metrics{ID: key, MType: "counter", Delta: &int64Value}
+			metrics := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeCounter, Delta: &int64Value}
 			bufTemp, err := easyjson.Marshal(metrics)
 			if err != nil {
 				return err
@@ -158,23 +298,30 @@ func (ru *runtimeUpdate) SendMetrics(host string, port string, sendTime int, com
 			}
 
 		}
-		time.Sleep(sendTimeDuration * time.Second)
-	}
+	case <-ctx.Done():
+		return nil
 
+	}
+	return nil
 }
 
-func (ru *runtimeUpdate) GetLoopMetrics(refreshTime int, metrics []string) error {
-	refreshTimeDuration := time.Duration(refreshTime)
-	for {
-		if err := ru.FillRepo(metrics); err != nil {
+func (ru *runtimeUpdate) GetMetrics(ctx context.Context, ticker *time.Ticker, metrics []string) error {
+
+	select {
+	case <-ticker.C:
+		ru.mu.Lock()
+		defer ru.mu.Unlock()
+		if err := ru.FillRepo(ctx, metrics); err != nil {
 			return fmt.Errorf("collect runtime metrics: %w", err)
 		}
-		if err := ru.service.CounterInsert("PollCount", 1); err != nil {
+		if err := ru.service.CounterInsert(ctx, "PollCount", 1); err != nil {
 			return fmt.Errorf("update counter PollCount: %w", err)
 		}
-		if err := ru.service.GaugeInsert("RandomValue", rand.Float64()); err != nil {
+		if err := ru.service.GaugeInsert(ctx, "RandomValue", rand.Float64()); err != nil {
 			return fmt.Errorf("update gauge RandomValue: %w", err)
 		}
-		time.Sleep(refreshTimeDuration * time.Second)
+	case <-ctx.Done():
+		return nil
 	}
+	return nil
 }

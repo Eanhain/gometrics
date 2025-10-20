@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -61,12 +62,12 @@ func TestPersistStorageFormattingAndImport(t *testing.T) {
 				require.NoError(t, storage.Close())
 			})
 
-			require.NoError(t, storage.FormattingLogs(tc.gauges, tc.counters))
+			require.NoError(t, storage.FormattingLogs(context.Background(), tc.gauges, tc.counters))
 			if tc.storeInter != 0 {
 				require.NoError(t, storage.Flush())
 			}
 
-			metrics, err := storage.ImportLogs()
+			metrics, err := storage.ImportLogs(context.Background())
 			require.NoError(t, err)
 			assertPersistedMetrics(t, metrics, tc.gauges, tc.counters)
 		})
@@ -81,12 +82,12 @@ func assertPersistedMetrics(t *testing.T, metrics []metricsdto.Metrics, gauges m
 
 	for _, metric := range metrics {
 		switch metric.MType {
-		case "gauge":
+		case metricsdto.MetricTypeGauge:
 			if metric.Value == nil {
 				t.Fatalf("gauge %q has nil value", metric.ID)
 			}
 			gotGauges[metric.ID] = *metric.Value
-		case "counter":
+		case metricsdto.MetricTypeCounter:
 			if metric.Delta == nil {
 				t.Fatalf("counter %q has nil delta", metric.ID)
 			}

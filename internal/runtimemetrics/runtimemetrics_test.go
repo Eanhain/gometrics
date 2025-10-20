@@ -1,8 +1,8 @@
 package runtimemetrics
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	metricsdto "gometrics/internal/api/metricsdto"
@@ -14,18 +14,18 @@ import (
 
 type stubPersistStorage struct{}
 
-func (s *stubPersistStorage) GaugeInsert(string, float64) error  { return nil }
-func (s *stubPersistStorage) CounterInsert(string, int) error    { return nil }
-func (s *stubPersistStorage) FormattingLogs(map[string]float64, map[string]int) error {
+func (s *stubPersistStorage) FormattingLogs(context.Context, map[string]float64, map[string]int) error {
 	return nil
 }
-func (s *stubPersistStorage) ImportLogs() ([]metricsdto.Metrics, error) {
+func (s *stubPersistStorage) ImportLogs(context.Context) ([]metricsdto.Metrics, error) {
 	return nil, nil
 }
-func (s *stubPersistStorage) GetFile() *os.File { return nil }
-func (s *stubPersistStorage) GetLoopTime() int  { return 0 }
-func (s *stubPersistStorage) Close() error      { return nil }
-func (s *stubPersistStorage) Flush() error      { return nil }
+func (s *stubPersistStorage) GetLoopTime() int { return 0 }
+func (s *stubPersistStorage) Close() error     { return nil }
+func (s *stubPersistStorage) Flush() error     { return nil }
+func (s *stubPersistStorage) Ping(context.Context) error {
+	return nil
+}
 
 func Test_runtimeUpdate_FillRepo(t *testing.T) {
 	type args struct {
@@ -58,7 +58,7 @@ func Test_runtimeUpdate_FillRepo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.ru.FillRepo(tt.args.metrics)
+			err := tt.ru.FillRepo(context.Background(), tt.args.metrics)
 			if tt.wantErr == nil {
 				assert.Nil(t, err)
 			} else {
