@@ -48,12 +48,12 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			name:    "Test insert & get metrics",
 			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
 			args: []args{
-				{key: "g1", rawValue: "1", valueType: "gauge"},
-				{key: "g2", rawValue: "2", valueType: "gauge"},
-				{key: "g3", rawValue: "3", valueType: "gauge"},
-				{key: "c1", rawValue: "1", valueType: "counter"},
-				{key: "c2", rawValue: "2", valueType: "counter"},
-				{key: "c3", rawValue: "3", valueType: "counter"},
+				{key: "g1", rawValue: "1", valueType: metricsdto.MetricTypeGauge},
+				{key: "g2", rawValue: "2", valueType: metricsdto.MetricTypeGauge},
+				{key: "g3", rawValue: "3", valueType: metricsdto.MetricTypeGauge},
+				{key: "c1", rawValue: "1", valueType: metricsdto.MetricTypeCounter},
+				{key: "c2", rawValue: "2", valueType: metricsdto.MetricTypeCounter},
+				{key: "c3", rawValue: "3", valueType: metricsdto.MetricTypeCounter},
 			},
 			want: want{
 				gaugeKeys:   []string{"g1", "g2", "g3"},
@@ -78,9 +78,9 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			name:    "Only gauge",
 			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
 			args: []args{
-				{key: "g1", rawValue: "1", valueType: "gauge"},
-				{key: "g2", rawValue: "2", valueType: "gauge"},
-				{key: "g3", rawValue: "3", valueType: "gauge"},
+				{key: "g1", rawValue: "1", valueType: metricsdto.MetricTypeGauge},
+				{key: "g2", rawValue: "2", valueType: metricsdto.MetricTypeGauge},
+				{key: "g3", rawValue: "3", valueType: metricsdto.MetricTypeGauge},
 			},
 			want: want{
 				counterKeys: []string{},
@@ -94,9 +94,9 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			name:    "Only counter",
 			service: NewService(storageOrig.NewMemStorage(), &stubPersistStorage{}),
 			args: []args{
-				{key: "c1", rawValue: "1", valueType: "counter"},
-				{key: "c2", rawValue: "2", valueType: "counter"},
-				{key: "c3", rawValue: "3", valueType: "counter"},
+				{key: "c1", rawValue: "1", valueType: metricsdto.MetricTypeCounter},
+				{key: "c2", rawValue: "2", valueType: metricsdto.MetricTypeCounter},
+				{key: "c3", rawValue: "3", valueType: metricsdto.MetricTypeCounter},
 			},
 			want: want{
 				gaugeKeys:   []string{},
@@ -112,11 +112,11 @@ func Test_service_GetAllMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, ins := range tt.args {
 				switch ins.valueType {
-				case "gauge":
+				case metricsdto.MetricTypeGauge:
 					valueFloat, err := strconv.ParseFloat(ins.rawValue, 64)
 					require.NoError(t, err)
 					tt.service.GaugeInsert(ctx, ins.key, valueFloat)
-				case "counter":
+				case metricsdto.MetricTypeCounter:
 					valueInt64, err := strconv.Atoi(ins.rawValue)
 					require.NoError(t, err)
 					tt.service.CounterInsert(ctx, ins.key, valueInt64)

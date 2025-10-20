@@ -92,7 +92,7 @@ func (ru *runtimeUpdate) AddGauge(keys []string, metrics map[string]string) (out
 		if err != nil {
 			return []metricsdto.Metrics{}, err
 		}
-		metric := metricsdto.Metrics{ID: key, MType: "gauge", Value: &valueFloat}
+		metric := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeGauge, Value: &valueFloat}
 		output = append(output, metric)
 	}
 	return output, nil
@@ -107,7 +107,7 @@ func (ru *runtimeUpdate) AddCounter(keys []string, metrics map[string]string) (o
 		if err != nil {
 			return []metricsdto.Metrics{}, err
 		}
-		metric := metricsdto.Metrics{ID: key, MType: "counter", Delta: &int64Value}
+		metric := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeCounter, Delta: &int64Value}
 		output = append(output, metric)
 	}
 	return output, nil
@@ -237,7 +237,7 @@ func (ru *runtimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, h
 			if err != nil {
 				return err
 			}
-			metrics := metricsdto.Metrics{ID: key, MType: "gauge", Value: &valueFloat}
+			metrics := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeGauge, Value: &valueFloat}
 			bufTemp, err := easyjson.Marshal(metrics)
 			if err != nil {
 				return err
@@ -272,7 +272,7 @@ func (ru *runtimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, h
 			if err != nil {
 				return err
 			}
-			metrics := metricsdto.Metrics{ID: key, MType: "counter", Delta: &int64Value}
+			metrics := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeCounter, Delta: &int64Value}
 			bufTemp, err := easyjson.Marshal(metrics)
 			if err != nil {
 				return err

@@ -139,7 +139,7 @@ func (s *Service) PersistRestore(ctx context.Context) error {
 
 func (s *Service) FromStructToStore(ctx context.Context, metric metricsdto.Metrics) error {
 	switch metric.MType {
-	case "gauge":
+	case metricsdto.MetricTypeGauge:
 		if metric.Value == nil {
 			value := float64(0)
 			metric.Value = &value
@@ -147,7 +147,7 @@ func (s *Service) FromStructToStore(ctx context.Context, metric metricsdto.Metri
 		if err := s.GaugeInsert(ctx, metric.ID, *metric.Value); err != nil {
 			return fmt.Errorf("insert gauge %s: %w", metric.ID, err)
 		}
-	case "counter":
+	case metricsdto.MetricTypeCounter:
 		if metric.Delta == nil {
 			value := int64(0)
 			metric.Delta = &value

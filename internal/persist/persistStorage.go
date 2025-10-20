@@ -58,7 +58,7 @@ func (pstorage *PersistStorage) FormattingLogs(ctx context.Context, gauge map[st
 		value := gvalue
 		metric := metricsdto.Metrics{
 			ID:    gkey,
-			MType: "gauge",
+			MType: metricsdto.MetricTypeGauge,
 			Value: &value}
 		metrics = append(metrics, metric)
 	}
@@ -66,7 +66,7 @@ func (pstorage *PersistStorage) FormattingLogs(ctx context.Context, gauge map[st
 		delta := int64(cvalue)
 		metric := metricsdto.Metrics{
 			ID:    ckey,
-			MType: "counter",
+			MType: metricsdto.MetricTypeCounter,
 			Delta: &delta}
 		metrics = append(metrics, metric)
 	}

@@ -120,7 +120,7 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 	nameMetric := chi.URLParam(req, "name")
 	format := "%v"
 	switch typeMetric {
-	case "gauge":
+	case metricsdto.MetricTypeGauge:
 		value, err := h.service.GetGauge(req.Context(), nameMetric)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("gauge metric not found: %v", err), http.StatusNotFound)
@@ -131,7 +131,7 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 			return
 		}
 		res.WriteHeader(http.StatusOK)
-	case "counter":
+	case metricsdto.MetricTypeCounter:
 		value, err := h.service.GetCounter(req.Context(), nameMetric)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("counter metric not found: %v", err), http.StatusNotFound)
@@ -153,7 +153,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 	nameMetric := chi.URLParam(req, "name")
 	valueMetric := chi.URLParam(req, "value")
 	switch typeMetric {
-	case "gauge":
+	case metricsdto.MetricTypeGauge:
 		value, err := strconv.ParseFloat(valueMetric, 64)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("could not parse gauge metric: %v", err), http.StatusBadRequest)
@@ -165,7 +165,7 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 			return
 		}
 		res.WriteHeader(http.StatusOK)
-	case "counter":
+	case metricsdto.MetricTypeCounter:
 		value, err := strconv.Atoi(valueMetric)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("could not parse counter metric: %v", err), http.StatusBadRequest)

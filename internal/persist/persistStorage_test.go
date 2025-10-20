@@ -82,12 +82,12 @@ func assertPersistedMetrics(t *testing.T, metrics []metricsdto.Metrics, gauges m
 
 	for _, metric := range metrics {
 		switch metric.MType {
-		case "gauge":
+		case metricsdto.MetricTypeGauge:
 			if metric.Value == nil {
 				t.Fatalf("gauge %q has nil value", metric.ID)
 			}
 			gotGauges[metric.ID] = *metric.Value
-		case "counter":
+		case metricsdto.MetricTypeCounter:
 			if metric.Delta == nil {
 				t.Fatalf("counter %q has nil delta", metric.ID)
 			}

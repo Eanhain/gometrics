@@ -1,5 +1,10 @@
 package metricsdto
 
+const (
+	MetricTypeGauge   = "gauge"
+	MetricTypeCounter = "counter"
+)
+
 //go:generate easyjson -all .
 
 //easyjson:json

@@ -168,32 +168,32 @@ func Test_handlerService_JsonInsert(t *testing.T) {
 			value: []dto.Metrics{
 				{
 					ID:    "g1",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f1,
 				},
 				{
 					ID:    "g2",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f2,
 				},
 				{
 					ID:    "g3",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f3,
 				},
 				{
 					ID:    "c1",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i1,
 				},
 				{
 					ID:    "c2",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i2,
 				},
 				{
 					ID:    "c3",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i3,
 				},
 			},
@@ -236,58 +236,58 @@ func Test_handlerService_JsonGet(t *testing.T) {
 			req: []dto.Metrics{
 				{
 					ID:    "g1",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 				},
 				{
 					ID:    "g2",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 				},
 				{
 					ID:    "g3",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 				},
 				{
 					ID:    "c1",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 				},
 				{
 					ID:    "c2",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 				},
 				{
 					ID:    "c3",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 				},
 			},
 			expect: []dto.Metrics{
 				{
 					ID:    "g1",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f1,
 				},
 				{
 					ID:    "g2",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f2,
 				},
 				{
 					ID:    "g3",
-					MType: "gauge",
+					MType: dto.MetricTypeGauge,
 					Value: &f3,
 				},
 				{
 					ID:    "c1",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i1,
 				},
 				{
 					ID:    "c2",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i2,
 				},
 				{
 					ID:    "c3",
-					MType: "counter",
+					MType: dto.MetricTypeCounter,
 					Delta: &i3,
 				},
 			},

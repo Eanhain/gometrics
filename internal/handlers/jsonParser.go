@@ -27,7 +27,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	switch metric.MType {
-	case "gauge":
+	case metricsdto.MetricTypeGauge:
 		if metric.Value == nil {
 			http.Error(res, "field Value is required for counter", http.StatusBadRequest)
 			return
@@ -37,7 +37,7 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 			return
 		}
 		res.WriteHeader(http.StatusOK)
-	case "counter":
+	case metricsdto.MetricTypeCounter:
 		if metric.Delta == nil {
 			http.Error(res, "delta is required for counter", http.StatusBadRequest)
 			return
@@ -76,7 +76,7 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	switch metric.MType {
-	case "gauge":
+	case metricsdto.MetricTypeGauge:
 		lVar, err := h.service.GetGauge(req.Context(), metric.ID)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusNotFound)
@@ -84,7 +84,7 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 		}
 		metric.Value = &lVar
 		res.WriteHeader(http.StatusOK)
-	case "counter":
+	case metricsdto.MetricTypeCounter:
 		lVar, err := h.service.GetCounter(req.Context(), metric.ID)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusNotFound)
