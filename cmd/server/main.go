@@ -11,6 +11,7 @@ import (
 	"gometrics/internal/retry"
 	"gometrics/internal/serverconfig"
 	"gometrics/internal/service"
+	"gometrics/internal/signature"
 	"gometrics/internal/storage"
 	"net/http"
 	"sync"
@@ -83,8 +84,14 @@ func main() {
 	}
 
 	newMux := chi.NewMux()
+
+	if f.Key != "" {
+		newMux.Use(signature.SignatureHandler(f.Key))
+	}
+
 	newMux.Use(newLogger.WithLogging)
 	newMux.Use(myCompress.GzipHandleReader)
+
 	newMux.Use(myCompress.GzipHandleWriter)
 
 	defer newService.StorageCloser()
