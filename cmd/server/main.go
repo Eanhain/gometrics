@@ -87,7 +87,7 @@ func main() {
 
 	newMux.Use(newLogger.WithLogging)
 
-	if f.Key != "" {
+	if f.Key != "" && f.Key != "none" {
 		newMux.Use(signature.SignatureHandler(f.Key))
 	}
 

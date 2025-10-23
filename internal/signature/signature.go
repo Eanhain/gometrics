@@ -63,7 +63,8 @@ func SignatureHandler(secret string) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if len(key) == 0 {
+			reqHeader := r.Header.Get("HashSHA256")
+			if reqHeader == "" || reqHeader == "none" {
 				next.ServeHTTP(w, r)
 				return
 			}
