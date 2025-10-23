@@ -15,6 +15,7 @@ type ResponseHashWriter struct {
 	inherit http.ResponseWriter
 	mac     hash.Hash
 	buffer  bytes.Buffer
+	rCode   int
 }
 
 func NewResponseHashWriter(w http.ResponseWriter, key []byte) *ResponseHashWriter {
@@ -22,11 +23,12 @@ func NewResponseHashWriter(w http.ResponseWriter, key []byte) *ResponseHashWrite
 		inherit: w,
 		mac:     hmac.New(sha256.New, key),
 		buffer:  bytes.Buffer{},
+		rCode:   http.StatusOK,
 	}
 }
 
 func (rw *ResponseHashWriter) Header() http.Header  { return rw.inherit.Header() }
-func (rw *ResponseHashWriter) WriteHeader(code int) { rw.inherit.WriteHeader(code) }
+func (rw *ResponseHashWriter) WriteHeader(code int) { rw.rCode = code }
 func (rw *ResponseHashWriter) Write(b []byte) (int, error) {
 	return rw.buffer.Write(b)
 }
@@ -52,6 +54,7 @@ func (rw *ResponseHashWriter) Finalyze() (int, error) {
 		return 0, fmt.Errorf("cannot parse buffer for hmac %v", err)
 	}
 	rw.Header().Set("HashSHA256", hex.EncodeToString(rw.mac.Sum(nil)))
+	rw.inherit.WriteHeader(rw.rCode)
 	return rw.inherit.Write(rw.buffer.Bytes())
 }
 

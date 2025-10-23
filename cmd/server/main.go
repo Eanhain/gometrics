@@ -85,14 +85,15 @@ func main() {
 
 	newMux := chi.NewMux()
 
+	newMux.Use(newLogger.WithLogging)
+
 	if f.Key != "" {
 		newMux.Use(signature.SignatureHandler(f.Key))
 	}
 
-	newMux.Use(newLogger.WithLogging)
-	newMux.Use(myCompress.GzipHandleReader)
-
 	newMux.Use(myCompress.GzipHandleWriter)
+
+	newMux.Use(myCompress.GzipHandleReader)
 
 	defer newService.StorageCloser()
 
