@@ -85,7 +85,7 @@ func main() {
 		defer ticker.Stop()
 		for {
 			if _, err := retryCfg.Retry(ctx, func(_ ...any) (any, error) {
-				return nil, metricsGen.SendMetricsGob(ctx, ticker, f.GetHost(), f.GetPort(), f.Compress)
+				return nil, metricsGen.SendMetricsGob(ctx, ticker, f.GetHost(), f.GetPort(), f.Compress, f.Key)
 			}); err != nil {
 				panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
 			}

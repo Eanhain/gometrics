@@ -14,6 +14,7 @@ type ClientConfig struct {
 	PollInterval   int       `env:"POLL_INTERVAL" envDefault:"2"`
 	Addr           addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
 	Compress       string    `env:"compress" envDefault:"gzip"`
+	Key            string    `env:"KEY" envDefault:""`
 }
 
 func (o *ClientConfig) GetPort() string {
@@ -38,5 +39,6 @@ func (o *ClientConfig) ParseFlags() {
 	flag.IntVar(&o.PollInterval, "p", o.PollInterval, "Refresh metrics interval")
 	flag.Var(&o.Addr, "a", "Host and port for connect/create")
 	flag.StringVar(&o.Compress, "c", o.Compress, "Send metrics with compression")
+	flag.StringVar(&o.Key, "k", o.Key, "Cipher key")
 	flag.Parse()
 }

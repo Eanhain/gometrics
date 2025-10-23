@@ -3,7 +3,10 @@ package runtimemetrics
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/gob"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -113,7 +116,7 @@ func (ru *runtimeUpdate) AddCounter(keys []string, metrics map[string]string) (o
 	return output, nil
 }
 
-func (ru *runtimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker, host string, port string, compress string) error {
+func (ru *runtimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker, host string, port string, compress string, key string) error {
 	var (
 		bufOut          []byte
 		metrics         []metricsdto.Metrics
@@ -196,6 +199,13 @@ func (ru *runtimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker
 				default:
 					bufOut = newBufferBytes
 				}
+				if key != "" {
+					hash, err := ru.ComputeHash(ctx, bufOut, key)
+					if err != nil {
+						return err
+					}
+					req.SetHeader("HashSHA256", hex.EncodeToString(hash))
+				}
 				_, err = req.
 					SetBody(bufOut).
 					Post(curl)
@@ -215,6 +225,15 @@ func (ru *runtimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker
 
 	}
 	return nil
+}
+
+func (ru *runtimeUpdate) ComputeHash(ctx context.Context, body []byte, key string) ([]byte, error) {
+	hmac := hmac.New(sha256.New, []byte(key))
+	if _, err := hmac.Write(body); err != nil {
+		return nil, err
+	}
+	hash := hmac.Sum(nil)
+	return hash, nil
 }
 
 func (ru *runtimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, host string, port string, compress string) error {
