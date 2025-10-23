@@ -9,6 +9,7 @@ import (
 	"hash"
 	"io"
 	"net/http"
+	"strings"
 )
 
 type ResponseHashWriter struct {
@@ -33,7 +34,7 @@ func (rw *ResponseHashWriter) Write(b []byte) (int, error) {
 	return rw.buffer.Write(b)
 }
 
-func SignatureCheck(r *http.Request, secret []byte) bool {
+func SignatureCheck(r *http.Request, secret []byte, header string) bool {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
 		return false
@@ -45,7 +46,7 @@ func SignatureCheck(r *http.Request, secret []byte) bool {
 	mac.Write(payload)
 	expected := mac.Sum(nil)
 
-	got, err := hex.DecodeString(r.Header.Get("HashSHA256"))
+	got, err := hex.DecodeString(header)
 	return err == nil && hmac.Equal(got, expected)
 }
 
@@ -63,15 +64,21 @@ func SignatureHandler(secret string) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			reqHeader := r.Header.Get("HashSHA256")
-			if reqHeader == "" || reqHeader == "none" {
+			if len(key) == 0 {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			if !SignatureCheck(r, key) {
-				http.Error(w, "wrong key", http.StatusBadRequest)
-				return
+			reqHeader := strings.TrimSpace(r.Header.Get("HashSHA256"))
+			if reqHeader == "" {
+				reqHeader = strings.TrimSpace(r.Header.Get("Hash"))
+			}
+
+			if reqHeader != "" && !strings.EqualFold(reqHeader, "none") {
+				if !SignatureCheck(r, key, reqHeader) {
+					http.Error(w, "wrong key", http.StatusBadRequest)
+					return
+				}
 			}
 
 			rw := NewResponseHashWriter(w, key)
