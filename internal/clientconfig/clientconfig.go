@@ -35,10 +35,14 @@ func (o *ClientConfig) ParseFlags() {
 	if err := env.Parse(o); err != nil {
 		fmt.Println("ENV var not found")
 	}
+	envKey := o.Key
 	flag.IntVar(&o.ReportInterval, "r", o.ReportInterval, "Send to server interval")
 	flag.IntVar(&o.PollInterval, "p", o.PollInterval, "Refresh metrics interval")
 	flag.Var(&o.Addr, "a", "Host and port for connect/create")
 	flag.StringVar(&o.Compress, "c", o.Compress, "Send metrics with compression")
 	flag.StringVar(&o.Key, "k", o.Key, "Cipher key")
 	flag.Parse()
+	if envKey != "" {
+		o.Key = envKey
+	}
 }
