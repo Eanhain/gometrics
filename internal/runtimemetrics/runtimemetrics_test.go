@@ -33,25 +33,25 @@ func Test_runtimeUpdate_FillRepo(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		ru      *runtimeUpdate
+		ru      *RuntimeUpdate
 		args    args
 		wantErr error
 	}{
 		{
 			name:    "All OK",
-			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{})),
+			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1),
 			args:    args{metrics: []string{"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "TotalAlloc"}},
 			wantErr: nil,
 		},
 		{
 			name:    "Wrong key",
-			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{})),
+			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1),
 			args:    args{metrics: []string{"NewMetric"}},
 			wantErr: fmt.Errorf("can't find value by this key"),
 		},
 		{
 			name:    "Wrong type",
-			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{})),
+			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1),
 			args:    args{metrics: []string{"BySize"}},
 			wantErr: fmt.Errorf("wrong data type"),
 		},

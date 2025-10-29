@@ -20,17 +20,21 @@ import (
 	"github.com/go-resty/resty/v2"
 
 	metricsdto "gometrics/internal/api/metricsdto"
-
+	"gometrics/internal/clientconfig"
 	myCompress "gometrics/internal/compress"
+	"gometrics/internal/retry"
 
 	easyjson "github.com/mailru/easyjson"
 )
 
-type runtimeUpdate struct {
+type RuntimeUpdate struct {
 	mu         sync.RWMutex
 	service    serviceInt
 	memMetrics runtime.MemStats
 	client     *resty.Client
+	ChIn       <-chan []metricsdto.Metrics
+	ChOut      <-chan []error
+	RateLimit  int
 }
 
 type serviceInt interface {
@@ -41,15 +45,18 @@ type serviceInt interface {
 	GetCounter(ctx context.Context, key string) (int, error)
 }
 
-func NewRuntimeUpdater(service serviceInt) *runtimeUpdate {
-	return &runtimeUpdate{
+func NewRuntimeUpdater(service serviceInt, RateLimit int) *RuntimeUpdate {
+	return &RuntimeUpdate{
 		service:    service,
 		memMetrics: runtime.MemStats{},
 		client:     resty.New(),
+		ChIn:       make(chan []metricsdto.Metrics, RateLimit),
+		ChOut:      make(chan []error, RateLimit),
+		RateLimit:  RateLimit,
 	}
 }
 
-func (ru *runtimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
+func (ru *RuntimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
 	TypeError := fmt.Errorf("wrong data type %s", rawValue.Kind())
 	valueType := rawValue.Kind().String()
 	switch valueType {
@@ -67,7 +74,7 @@ func (ru *runtimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
 
 }
 
-func (ru *runtimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
+func (ru *RuntimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 	runtime.ReadMemStats(&ru.memMetrics)
 	v := reflect.ValueOf(ru.memMetrics)
 	for _, metricName := range metrics {
@@ -88,7 +95,7 @@ func (ru *runtimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 	return nil
 }
 
-func (ru *runtimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
+func (ru *RuntimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
 	for _, key := range keys {
 		value := metrics[key]
 		valueFloat, err := strconv.ParseFloat(value, 64)
@@ -101,7 +108,7 @@ func (ru *runtimeUpdate) AddGauge(keys []string, metrics map[string]string) (out
 	return output, nil
 }
 
-func (ru *runtimeUpdate) AddCounter(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
+func (ru *RuntimeUpdate) AddCounter(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
 	for _, key := range keys {
 		value := metrics[key]
 
@@ -116,7 +123,7 @@ func (ru *runtimeUpdate) AddCounter(keys []string, metrics map[string]string) (o
 	return output, nil
 }
 
-func (ru *runtimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker, host string, port string, compress string, key string) error {
+func (ru *RuntimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker, host string, port string, compress string, key string) error {
 	var (
 		bufOut          []byte
 		metrics         []metricsdto.Metrics
@@ -227,7 +234,7 @@ func (ru *runtimeUpdate) SendMetricsGob(ctx context.Context, ticker *time.Ticker
 	return nil
 }
 
-func (ru *runtimeUpdate) ComputeHash(ctx context.Context, body []byte, key string) ([]byte, error) {
+func (ru *RuntimeUpdate) ComputeHash(ctx context.Context, body []byte, key string) ([]byte, error) {
 	hmac := hmac.New(sha256.New, []byte(key))
 	if _, err := hmac.Write(body); err != nil {
 		return nil, err
@@ -236,7 +243,7 @@ func (ru *runtimeUpdate) ComputeHash(ctx context.Context, body []byte, key strin
 	return hash, nil
 }
 
-func (ru *runtimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, host string, port string, compress string) error {
+func (ru *RuntimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, host string, port string, compress string) error {
 	var bufOut []byte
 	curl := fmt.Sprintf("http://%v%v/update/", host, port)
 	select {
@@ -324,7 +331,7 @@ func (ru *runtimeUpdate) SendMetrics(ctx context.Context, ticker *time.Ticker, h
 	return nil
 }
 
-func (ru *runtimeUpdate) GetMetrics(ctx context.Context, ticker *time.Ticker, metrics []string) error {
+func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, ticker *time.Ticker, metrics []string) error {
 
 	select {
 	case <-ticker.C:
@@ -343,4 +350,44 @@ func (ru *runtimeUpdate) GetMetrics(ctx context.Context, ticker *time.Ticker, me
 		return nil
 	}
 	return nil
+}
+
+func (ru *RuntimeUpdate) SendMetricsToCh(ctx context.Context, ticker *time.Ticker, chIn <-chan []metricsdto.Metrics) {
+	ru.service.GetAllMetrics(ctx)
+}
+
+// func (ru *RuntimeUpdate) SendMetricsToCh(ctx context.Context, ticker *time.Ticker, chIn <-chan []metricsdto.Metrics) {
+// 	ru.service.GetAllMetrics(ctx)
+// }
+
+func (ru *RuntimeUpdate) Sender(ctx context.Context, worker int, wg *sync.WaitGroup, retryCfg retry.RetryConfig, f clientconfig.ClientConfig) {
+	defer wg.Done()
+	ticker := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
+	defer ticker.Stop()
+	for {
+		if _, err := retryCfg.Retry(ctx, func(_ ...any) (any, error) {
+			err := ru.SendMetricsGob(ctx, ticker, f.GetHost(), f.GetPort(), f.Compress, f.Key)
+			return nil, err
+		}); err != nil {
+			panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
+		}
+	}
+}
+
+func (ru *RuntimeUpdate) Generator(ctx context.Context, wg *sync.WaitGroup, f clientconfig.ClientConfig, metrics []string) {
+	defer wg.Done()
+	ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
+	defer ticker.Stop()
+	for {
+		if err := ru.GetMetrics(ctx, ticker, metrics); err != nil {
+			panic(fmt.Errorf("runtime metrics loop: %w", err))
+		}
+		// if err := ru.SendMetrics(ctx, ticker); err != nil {
+		// 	panic(fmt.Errorf("cannot send metrics to channel: %w", err))
+		// }
+	}
+}
+
+func (ru *RuntimeUpdate) GetRateLimit() int {
+	return ru.RateLimit
 }
