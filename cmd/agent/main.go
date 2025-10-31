@@ -85,6 +85,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
@@ -94,6 +95,7 @@ func main() {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
@@ -110,8 +112,8 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			for worker := range metricsGen.GetRateLimit() {
-				wg.Add(1)
 				workerIt := worker
+				wg.Add(1)
 				go metricsGen.Sender(ctx, &wg, workerIt, ticker, retryCfg, curl, f)
 			}
 		}

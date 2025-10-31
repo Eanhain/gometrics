@@ -61,7 +61,7 @@ func (ru *RuntimeUpdate) FillRepoExt(ctx context.Context, metrics []string) erro
 		return err
 	}
 	cpuPercent, err := cpu.Percent(0, false)
-	fmt.Println(cpuPercent)
+	// fmt.Println(cpuPercent)
 	if err != nil {
 		return err
 	}
