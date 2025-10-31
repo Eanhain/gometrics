@@ -85,14 +85,14 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			metricsGen.ParseMetrics(ctx, f, extMetrics, true)
-		}
-	}()
+	// go func() {
+	// 	defer wg.Done()
+	// 	ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
+	// 	defer ticker.Stop()
+	// 	for range ticker.C {
+	// 		metricsGen.ParseMetrics(ctx, f, extMetrics, true)
+	// 	}
+	// }()
 
 	go func() {
 		defer wg.Done()
