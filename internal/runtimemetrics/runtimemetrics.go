@@ -298,10 +298,6 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 
 		metrics = append(metrics, gauges...)
 
-		if err != nil {
-			panic(fmt.Errorf("error with SendMetricsGob %v", err))
-		}
-
 		ru.ChIn <- metrics
 
 		if i >= len(metricMaps) {
