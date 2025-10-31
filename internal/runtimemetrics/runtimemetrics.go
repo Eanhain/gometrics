@@ -68,6 +68,7 @@ func (ru *RuntimeUpdate) FillRepoExt(ctx context.Context, metrics []string) erro
 		return err
 	}
 	ru.mu.Lock()
+	defer ru.mu.Unlock()
 	if err = ru.service.GaugeInsert(ctx, strings.ToLower(metrics[0]), float64(vmem.Total)); err != nil {
 		return err
 	}
@@ -77,7 +78,7 @@ func (ru *RuntimeUpdate) FillRepoExt(ctx context.Context, metrics []string) erro
 	if err = ru.service.GaugeInsert(ctx, strings.ToLower(metrics[2]), cpuPercent[0]); err != nil {
 		return err
 	}
-	ru.mu.Unlock()
+
 	return nil
 }
 
