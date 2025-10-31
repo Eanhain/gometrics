@@ -34,9 +34,7 @@ type RuntimeUpdate struct {
 	memMetrics runtime.MemStats
 	client     *resty.Client
 	ChIn       chan []metricsdto.Metrics
-	ChOut      chan error
-	// ChDone <- chan any
-	RateLimit int
+	RateLimit  int
 }
 
 type serviceInt interface {
@@ -53,7 +51,6 @@ func NewRuntimeUpdater(service serviceInt, RateLimit int) *RuntimeUpdate {
 		memMetrics: runtime.MemStats{},
 		client:     resty.New(),
 		ChIn:       make(chan []metricsdto.Metrics),
-		ChOut:      make(chan error, RateLimit),
 		RateLimit:  RateLimit,
 	}
 }
@@ -221,7 +218,6 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 		if err != nil {
 			log.Println("WARN: Can't connect to metrics server")
 		}
-		ru.ChOut <- nil
 	}
 	return nil
 }
