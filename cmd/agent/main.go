@@ -54,9 +54,8 @@ var extMetrics = []string{
 
 func main() {
 
-	if _, err := cpu.Percent(0, false); err != nil {
-		panic(err)
-	}
+	out, err := cpu.Percent(0, false)
+	fmt.Println(out)
 
 	ctx := context.Background()
 

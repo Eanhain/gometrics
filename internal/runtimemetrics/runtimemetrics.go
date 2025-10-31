@@ -64,6 +64,7 @@ func (ru *RuntimeUpdate) FillRepoExt(ctx context.Context, metrics []string) erro
 		return err
 	}
 	cpuPercent, err := cpu.Percent(0, false)
+	fmt.Println(cpuPercent)
 	if err != nil {
 		return err
 	}
@@ -226,13 +227,11 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 }
 
 func (ru *RuntimeUpdate) ParseMetrics(ctx context.Context, f clientconfig.ClientConfig, metrics []string, ext bool) {
-	for {
-		if err := ru.GetMetrics(ctx, metrics, ext); err != nil {
-			panic(fmt.Errorf("runtime metrics loop: %w", err))
-		}
-		if !ext {
-			ru.GeneratorBatch(ctx)
-		}
+	if err := ru.GetMetrics(ctx, metrics, ext); err != nil {
+		panic(fmt.Errorf("runtime metrics loop: %w", err))
+	}
+	if !ext {
+		ru.GeneratorBatch(ctx)
 	}
 }
 
