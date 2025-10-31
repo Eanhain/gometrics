@@ -230,7 +230,9 @@ func (ru *RuntimeUpdate) ParseMetrics(ctx context.Context, f clientconfig.Client
 		if err := ru.GetMetrics(ctx, metrics, ext); err != nil {
 			panic(fmt.Errorf("runtime metrics loop: %w", err))
 		}
-		ru.GeneratorBatch(ctx)
+		if !ext {
+			ru.GeneratorBatch(ctx)
+		}
 	}
 }
 
