@@ -69,7 +69,7 @@ func main() {
 
 	f := clientconfig.InitialFlags()
 	f.ParseFlags()
-	metricsGen := runtimemetrics.NewRuntimeUpdater(newService, f.RateLimit, len(metrics)+1)
+	metricsGen := runtimemetrics.NewRuntimeUpdater(newService, f.RateLimit)
 
 	var wg sync.WaitGroup
 

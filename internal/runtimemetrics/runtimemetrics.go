@@ -30,7 +30,7 @@ type RuntimeUpdate struct {
 	service    serviceInt
 	memMetrics runtime.MemStats
 	client     *resty.Client
-	ChIn       chan metricsdto.Metrics
+	ChIn       chan []metricsdto.Metrics
 	ChOut      chan error
 	// ChDone <- chan any
 	RateLimit int
@@ -44,12 +44,12 @@ type serviceInt interface {
 	GetCounter(ctx context.Context, key string) (int, error)
 }
 
-func NewRuntimeUpdater(service serviceInt, RateLimit int, jobs int) *RuntimeUpdate {
+func NewRuntimeUpdater(service serviceInt, RateLimit int) *RuntimeUpdate {
 	return &RuntimeUpdate{
 		service:    service,
 		memMetrics: runtime.MemStats{},
 		client:     resty.New(),
-		ChIn:       make(chan metricsdto.Metrics, jobs),
+		ChIn:       make(chan []metricsdto.Metrics),
 		ChOut:      make(chan error, RateLimit),
 		RateLimit:  RateLimit,
 	}
@@ -130,7 +130,7 @@ func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, worker 
 		return
 	default:
 		if _, err := retryCfg.Retry(ctx, func(_ ...any) (any, error) {
-			log.Println("Run goroutine", worker)
+			log.Println("run goroutine", worker)
 			err := ru.SendMetricGobCh(ctx, curl, f.Compress, f.Key)
 			return nil, err
 		}); err != nil {
@@ -144,11 +144,8 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 	var (
 		bufOut    []byte
 		newBuffer bytes.Buffer
-		metrics   []metricsdto.Metrics
 	)
-	for metric := range ru.ChIn {
-		metrics = nil
-		metrics := append(metrics, metric)
+	for metrics := range ru.ChIn {
 		req := ru.client.R().SetHeader("Content-Type", "application/x-gob")
 		encoder := gob.NewEncoder(&newBuffer)
 		err := encoder.Encode(metrics)
@@ -195,35 +192,90 @@ func (ru *RuntimeUpdate) ParseMetrics(ctx context.Context, f clientconfig.Client
 		if err := ru.GetMetrics(ctx, metrics); err != nil {
 			panic(fmt.Errorf("runtime metrics loop: %w", err))
 		}
-		ru.Generator(ctx)
+		ru.GeneratorBatch(ctx)
 	}
 }
 
-func (ru *RuntimeUpdate) Generator(ctx context.Context) error {
-	gaugeList, counterList, metrics := ru.service.GetAllMetrics(ctx)
-	for _, gauge := range gaugeList {
-		val, err := strconv.ParseFloat(metrics[gauge], 64)
+func (ru *RuntimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
+	for _, key := range keys {
+		value := metrics[key]
+		valueFloat, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			return err
+			return []metricsdto.Metrics{}, err
 		}
-		metric := metricsdto.Metrics{
-			ID:    gauge,
-			MType: metricsdto.MetricTypeGauge,
-			Value: &val,
-		}
-		ru.ChIn <- metric
+		metric := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeGauge, Value: &valueFloat}
+		output = append(output, metric)
 	}
-	for _, counter := range counterList {
-		val, err := strconv.ParseInt(metrics[counter], 10, 64)
+	return output, nil
+}
+
+func (ru *RuntimeUpdate) AddCounter(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
+	for _, key := range keys {
+		value := metrics[key]
+
+		valueInt, err := strconv.Atoi(value)
+		int64Value := int64(valueInt)
 		if err != nil {
-			return err
+			return []metricsdto.Metrics{}, err
 		}
-		metric := metricsdto.Metrics{
-			ID:    counter,
-			MType: metricsdto.MetricTypeCounter,
-			Delta: &val,
+		metric := metricsdto.Metrics{ID: key, MType: metricsdto.MetricTypeCounter, Delta: &int64Value}
+		output = append(output, metric)
+	}
+	return output, nil
+}
+
+func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
+
+	var (
+		keysCounterIter []string
+		keysGaugeIter   []string
+		metrics         []metricsdto.Metrics
+	)
+
+	keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics(ctx)
+
+	i := 10
+
+	for {
+
+		if len(keysCounter) <= i && len(keysCounter) > i-10 {
+			keysCounterIter = keysCounter[i-10:]
+		} else if i-10 >= len(keysCounter) {
+			keysCounterIter = []string{}
+		} else {
+			keysCounterIter = keysCounter[i-10 : i]
 		}
-		ru.ChIn <- metric
+		if len(keysGauge) <= i && len(keysGauge) > i-10 {
+			keysGaugeIter = keysGauge[i-10:]
+		} else if i-10 >= len(keysGauge) {
+			keysGaugeIter = []string{}
+		} else {
+			keysGaugeIter = keysGauge[i-10 : i]
+		}
+		counters, err := ru.AddCounter(keysCounterIter, metricMaps)
+		if err != nil {
+			panic(fmt.Errorf("error with SendMetricsGob %v", err))
+		}
+		metrics = append(metrics, counters...)
+
+		gauges, err := ru.AddGauge(keysGaugeIter, metricMaps)
+
+		if err != nil {
+			panic(fmt.Errorf("error with SendMetricsGob %v", err))
+		}
+
+		metrics = append(metrics, gauges...)
+
+		if err != nil {
+			panic(fmt.Errorf("error with SendMetricsGob %v", err))
+		}
+
+		ru.ChIn <- metrics
+
+		if i >= len(metricMaps) {
+			break
+		}
+		i += 10
 	}
 	return nil
 }
