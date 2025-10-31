@@ -17,6 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
+
 	"github.com/go-resty/resty/v2"
 
 	metricsdto "gometrics/internal/api/metricsdto"
@@ -53,6 +56,29 @@ func NewRuntimeUpdater(service serviceInt, RateLimit int) *RuntimeUpdate {
 		ChOut:      make(chan error, RateLimit),
 		RateLimit:  RateLimit,
 	}
+}
+
+func (ru *RuntimeUpdate) FillRepoExt(ctx context.Context, metrics []string) error {
+	vmem, err := mem.VirtualMemory()
+	if err != nil {
+		return err
+	}
+	cpuPercent, err := cpu.Percent(0, false)
+	if err != nil {
+		return err
+	}
+
+	if err = ru.service.GaugeInsert(ctx, strings.ToLower(metrics[0]), float64(vmem.Total)); err != nil {
+		return err
+	}
+	if err = ru.service.GaugeInsert(ctx, strings.ToLower(metrics[1]), float64(vmem.Free)); err != nil {
+		return err
+	}
+	if err = ru.service.GaugeInsert(ctx, strings.ToLower(metrics[2]), cpuPercent[0]); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (ru *RuntimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
@@ -103,21 +129,29 @@ func (ru *RuntimeUpdate) ComputeHash(ctx context.Context, body []byte, key strin
 	return hash, nil
 }
 
-func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string) error {
+func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext bool) error {
 	select {
 	case <-ctx.Done():
 		return nil
 	default:
-		ru.mu.Lock()
-		defer ru.mu.Unlock()
-		if err := ru.FillRepo(ctx, metrics); err != nil {
-			return fmt.Errorf("collect runtime metrics: %w", err)
-		}
-		if err := ru.service.CounterInsert(ctx, "PollCount", 1); err != nil {
-			return fmt.Errorf("update counter PollCount: %w", err)
-		}
-		if err := ru.service.GaugeInsert(ctx, "RandomValue", rand.Float64()); err != nil {
-			return fmt.Errorf("update gauge RandomValue: %w", err)
+		if !ext {
+			ru.mu.Lock()
+			defer ru.mu.Unlock()
+			if err := ru.FillRepo(ctx, metrics); err != nil {
+				return fmt.Errorf("collect runtime metrics: %w", err)
+			}
+			if err := ru.service.CounterInsert(ctx, "PollCount", 1); err != nil {
+				return fmt.Errorf("update counter PollCount: %w", err)
+			}
+			if err := ru.service.GaugeInsert(ctx, "RandomValue", rand.Float64()); err != nil {
+				return fmt.Errorf("update gauge RandomValue: %w", err)
+			}
+		} else {
+			ru.mu.Lock()
+			defer ru.mu.Unlock()
+			if err := ru.FillRepoExt(ctx, metrics); err != nil {
+				return fmt.Errorf("collect runtime metrics: %w", err)
+			}
 		}
 	}
 	return nil
@@ -185,11 +219,9 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 	return nil
 }
 
-func (ru *RuntimeUpdate) ParseMetrics(ctx context.Context, f clientconfig.ClientConfig, metrics []string) {
-	// ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
-	// defer ticker.Stop()
+func (ru *RuntimeUpdate) ParseMetrics(ctx context.Context, f clientconfig.ClientConfig, metrics []string, ext bool) {
 	for {
-		if err := ru.GetMetrics(ctx, metrics); err != nil {
+		if err := ru.GetMetrics(ctx, metrics, ext); err != nil {
 			panic(fmt.Errorf("runtime metrics loop: %w", err))
 		}
 		ru.GeneratorBatch(ctx)

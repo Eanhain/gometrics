@@ -12,6 +12,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/shirou/gopsutil/v4/cpu"
 )
 
 var metrics = []string{
@@ -44,7 +46,17 @@ var metrics = []string{
 	"TotalAlloc",
 }
 
+var extMetrics = []string{
+	"TotalMemory",
+	"FreeMemory",
+	"CPUutilization1",
+}
+
 func main() {
+
+	if _, err := cpu.Percent(0, false); err != nil {
+		panic(err)
+	}
 
 	ctx := context.Background()
 
@@ -78,7 +90,16 @@ func main() {
 		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			metricsGen.ParseMetrics(ctx, f, metrics)
+			metricsGen.ParseMetrics(ctx, f, extMetrics, true)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			metricsGen.ParseMetrics(ctx, f, metrics, false)
 		}
 	}()
 
