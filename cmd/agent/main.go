@@ -69,14 +69,17 @@ func main() {
 
 	f := clientconfig.InitialFlags()
 	f.ParseFlags()
-	metricsGen := runtimemetrics.NewRuntimeUpdater(newService, f.RateLimit)
+	metricsGen := runtimemetrics.NewRuntimeUpdater(newService, f.RateLimit, len(metrics)+1)
 
 	var wg sync.WaitGroup
 
 	go func() {
 		defer wg.Done()
-		metricsGen.ParseMetrics(ctx, f, metrics)
-
+		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			metricsGen.ParseMetrics(ctx, f, metrics)
+		}
 	}()
 
 	wg.Add(1)
