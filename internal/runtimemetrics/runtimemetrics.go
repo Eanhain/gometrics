@@ -32,9 +32,10 @@ type RuntimeUpdate struct {
 	service    serviceInt
 	memMetrics runtime.MemStats
 	client     *resty.Client
-	ChIn       <-chan []metricsdto.Metrics
-	ChOut      <-chan []error
-	RateLimit  int
+	ChIn       chan metricsdto.Metrics
+	ChOut      chan error
+	// ChDone <- chan any
+	RateLimit int
 }
 
 type serviceInt interface {
@@ -50,8 +51,8 @@ func NewRuntimeUpdater(service serviceInt, RateLimit int) *RuntimeUpdate {
 		service:    service,
 		memMetrics: runtime.MemStats{},
 		client:     resty.New(),
-		ChIn:       make(chan []metricsdto.Metrics, RateLimit),
-		ChOut:      make(chan []error, RateLimit),
+		ChIn:       make(chan metricsdto.Metrics, RateLimit),
+		ChOut:      make(chan error, RateLimit),
 		RateLimit:  RateLimit,
 	}
 }
@@ -352,40 +353,108 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, ticker *time.Ticker, me
 	return nil
 }
 
-func (ru *RuntimeUpdate) SendMetricsToCh(ctx context.Context, ticker *time.Ticker, chIn <-chan []metricsdto.Metrics) {
-	ru.service.GetAllMetrics(ctx)
-}
-
-// func (ru *RuntimeUpdate) SendMetricsToCh(ctx context.Context, ticker *time.Ticker, chIn <-chan []metricsdto.Metrics) {
-// 	ru.service.GetAllMetrics(ctx)
-// }
-
-func (ru *RuntimeUpdate) Sender(ctx context.Context, worker int, wg *sync.WaitGroup, retryCfg retry.RetryConfig, f clientconfig.ClientConfig) {
+func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, worker int, ticker *time.Ticker, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
 	defer wg.Done()
-	ticker := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
-	defer ticker.Stop()
-	for {
+	select {
+	case <-ctx.Done():
+		return
+	default:
 		if _, err := retryCfg.Retry(ctx, func(_ ...any) (any, error) {
-			err := ru.SendMetricsGob(ctx, ticker, f.GetHost(), f.GetPort(), f.Compress, f.Key)
+			log.Println("Run goroutine", worker)
+			err := ru.SendMetricGobCh(ctx, ticker, curl, f.Compress, f.Key)
 			return nil, err
 		}); err != nil {
 			panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
 		}
 	}
+
 }
 
-func (ru *RuntimeUpdate) Generator(ctx context.Context, wg *sync.WaitGroup, f clientconfig.ClientConfig, metrics []string) {
-	defer wg.Done()
+func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, ticker *time.Ticker, curl string, compress string, key string) error {
+	var (
+		bufOut    []byte
+		newBuffer bytes.Buffer
+		metric    metricsdto.Metrics
+		metrics   []metricsdto.Metrics
+	)
+	metric = <-ru.ChIn
+	metrics = append(metrics, metric)
+	req := ru.client.R().SetHeader("Content-Type", "application/x-gob")
+	encoder := gob.NewEncoder(&newBuffer)
+	err := encoder.Encode(metrics)
+	newBufferBytes := newBuffer.Bytes()
+	if err != nil {
+		return err
+	}
+	switch compress {
+	case "gzip":
+		bufOut, err = myCompress.Compress(newBufferBytes)
+		if err != nil {
+			return err
+		}
+		req.
+			SetHeader("Accept-Encoding", "gzip").
+			SetHeader("Content-Encoding", "gzip")
+	case "false":
+		bufOut = newBufferBytes
+	default:
+		bufOut = newBufferBytes
+	}
+	if key != "" {
+		hash, err := ru.ComputeHash(ctx, bufOut, key)
+		if err != nil {
+			return err
+		}
+		req.SetHeader("HashSHA256", hex.EncodeToString(hash))
+	}
+	_, err = req.
+		SetBody(bufOut).
+		Post(curl)
+	if err != nil {
+		log.Println("WARN: Can't connect to metrics server")
+	}
+	ru.ChOut <- nil
+	return nil
+}
+
+func (ru *RuntimeUpdate) ParseMetrics(ctx context.Context, f clientconfig.ClientConfig, metrics []string) {
 	ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
 	defer ticker.Stop()
 	for {
 		if err := ru.GetMetrics(ctx, ticker, metrics); err != nil {
 			panic(fmt.Errorf("runtime metrics loop: %w", err))
 		}
-		// if err := ru.SendMetrics(ctx, ticker); err != nil {
-		// 	panic(fmt.Errorf("cannot send metrics to channel: %w", err))
-		// }
+		ru.Generator(ctx, *ticker)
 	}
+}
+
+func (ru *RuntimeUpdate) Generator(ctx context.Context, ticker time.Ticker) error {
+	gaugeList, counterList, metrics := ru.service.GetAllMetrics(ctx)
+	for _, gauge := range gaugeList {
+		val, err := strconv.ParseFloat(metrics[gauge], 64)
+		if err != nil {
+			return err
+		}
+		metric := metricsdto.Metrics{
+			ID:    gauge,
+			MType: metricsdto.MetricTypeGauge,
+			Value: &val,
+		}
+		ru.ChIn <- metric
+	}
+	for _, counter := range counterList {
+		val, err := strconv.ParseInt(metrics[counter], 10, 64)
+		if err != nil {
+			return err
+		}
+		metric := metricsdto.Metrics{
+			ID:    counter,
+			MType: metricsdto.MetricTypeGauge,
+			Delta: &val,
+		}
+		ru.ChIn <- metric
+	}
+	return nil
 }
 
 func (ru *RuntimeUpdate) GetRateLimit() int {

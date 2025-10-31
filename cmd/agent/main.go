@@ -73,13 +73,25 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	go metricsGen.Generator(ctx, &wg, f, metrics)
+	go func() {
+		defer wg.Done()
+		metricsGen.ParseMetrics(ctx, f, metrics)
 
-	for worker := range metricsGen.GetRateLimit() {
-		wg.Add(1)
-		workerIt := worker
-		go metricsGen.Sender(ctx, workerIt, &wg, retryCfg, f)
-	}
+	}()
+
+	wg.Add(1)
+	go func() {
+		ticker := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
+		curl := fmt.Sprintf("http://%v%v/updates/", f.GetHost(), f.GetPort())
+		defer ticker.Stop()
+		for range ticker.C {
+			for worker := range metricsGen.GetRateLimit() {
+				wg.Add(1)
+				workerIt := worker
+				go metricsGen.Sender(ctx, &wg, workerIt, ticker, retryCfg, curl, f)
+			}
+		}
+	}()
 
 	wg.Wait()
 }

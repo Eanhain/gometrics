@@ -39,7 +39,7 @@ func (o *ClientConfig) ParseFlags() {
 	envKey := o.Key
 	flag.IntVar(&o.ReportInterval, "r", o.ReportInterval, "Send to server interval")
 	flag.IntVar(&o.PollInterval, "p", o.PollInterval, "Refresh metrics interval")
-	flag.IntVar(&o.PollInterval, "l", o.PollInterval, "sender counter")
+	flag.IntVar(&o.RateLimit, "l", o.RateLimit, "sender counter")
 	flag.Var(&o.Addr, "a", "Host and port for connect/create")
 	flag.StringVar(&o.Compress, "c", o.Compress, "Send metrics with compression")
 	flag.StringVar(&o.Key, "k", o.Key, "Cipher key")
