@@ -106,6 +106,7 @@ func main() {
 	}()
 
 	wg.Add(1)
+	wg.Add(metricsGen.GetRateLimit())
 	go func() {
 		ticker := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
 		curl := fmt.Sprintf("http://%v%v/updates/", f.GetHost(), f.GetPort())
@@ -113,7 +114,6 @@ func main() {
 		for range ticker.C {
 			for worker := range metricsGen.GetRateLimit() {
 				workerIt := worker
-				wg.Add(1)
 				go metricsGen.Sender(ctx, &wg, workerIt, ticker, retryCfg, curl, f)
 			}
 		}
