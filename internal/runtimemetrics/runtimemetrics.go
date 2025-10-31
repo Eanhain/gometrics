@@ -68,7 +68,6 @@ func (ru *RuntimeUpdate) FillRepoExt(ctx context.Context, metrics []string) erro
 		return err
 	}
 	ru.mu.Lock()
-	defer ru.mu.Unlock()
 	if err = ru.service.GaugeInsert(ctx, strings.ToLower(metrics[0]), float64(vmem.Total)); err != nil {
 		return err
 	}
@@ -78,7 +77,7 @@ func (ru *RuntimeUpdate) FillRepoExt(ctx context.Context, metrics []string) erro
 	if err = ru.service.GaugeInsert(ctx, strings.ToLower(metrics[2]), cpuPercent[0]); err != nil {
 		return err
 	}
-
+	ru.mu.Unlock()
 	return nil
 }
 
@@ -116,6 +115,7 @@ func (ru *RuntimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 		ru.mu.Lock()
 		err = ru.service.GaugeInsert(ctx, strings.ToLower(metricName), value)
 		if err != nil {
+			ru.mu.Unlock()
 			return err
 		}
 		ru.mu.Unlock()
@@ -138,20 +138,22 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 		return nil
 	default:
 		if !ext {
-			ru.mu.Lock()
-			defer ru.mu.Unlock()
 			if err := ru.FillRepo(ctx, metrics); err != nil {
 				return fmt.Errorf("collect runtime metrics: %w", err)
 			}
+			ru.mu.Lock()
 			if err := ru.service.CounterInsert(ctx, "PollCount", 1); err != nil {
+				ru.mu.Unlock()
 				return fmt.Errorf("update counter PollCount: %w", err)
 			}
+			ru.mu.Unlock()
+			ru.mu.Lock()
 			if err := ru.service.GaugeInsert(ctx, "RandomValue", rand.Float64()); err != nil {
+				ru.mu.Unlock()
 				return fmt.Errorf("update gauge RandomValue: %w", err)
 			}
+			ru.mu.Unlock()
 		} else {
-			ru.mu.Lock()
-			defer ru.mu.Unlock()
 			if err := ru.FillRepoExt(ctx, metrics); err != nil {
 				return fmt.Errorf("collect runtime metrics: %w", err)
 			}
