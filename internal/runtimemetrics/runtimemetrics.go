@@ -49,7 +49,7 @@ func NewRuntimeUpdater(service serviceInt, RateLimit int) *RuntimeUpdate {
 		service:    service,
 		memMetrics: runtime.MemStats{},
 		client:     resty.New(),
-		ChIn:       make(chan []metricsdto.Metrics),
+		ChIn:       make(chan []metricsdto.Metrics, RateLimit),
 		RateLimit:  RateLimit,
 	}
 }
