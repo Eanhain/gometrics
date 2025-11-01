@@ -159,24 +159,8 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 	}
 	return nil
 }
-
-func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
-	defer wg.Done()
-	select {
-	case <-ctx.Done():
-		return
-	default:
-		if _, err := retryCfg.Retry(ctx, func(_ ...any) (any, error) {
-			err := ru.SendMetricGobCh(ctx, curl, f.Compress, f.Key)
-			return nil, err
-		}); err != nil {
-			panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
-		}
-	}
-
-}
-
-func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compress string, key string) error {
+func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, retryCfg retry.RetryConfig, curl string, compress string, key string) error {
+	client := resty.New()
 
 	for metrics := range ru.ChIn {
 		var (
@@ -184,29 +168,27 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 			newBuffer bytes.Buffer
 		)
 
-		log.Println("Metrics send", len(metrics))
-
-		req := ru.client.R().SetHeader("Content-Type", "application/x-gob")
+		req := client.R().SetHeader("Content-Type", "application/x-gob")
 		encoder := gob.NewEncoder(&newBuffer)
 		err := encoder.Encode(metrics)
 		newBufferBytes := newBuffer.Bytes()
+
 		if err != nil {
 			return err
 		}
+
 		switch compress {
 		case "gzip":
 			bufOut, err = myCompress.Compress(newBufferBytes)
 			if err != nil {
 				return err
 			}
-			req.
-				SetHeader("Accept-Encoding", "gzip").
+			req.SetHeader("Accept-Encoding", "gzip").
 				SetHeader("Content-Encoding", "gzip")
-		case "false":
-			bufOut = newBufferBytes
 		default:
 			bufOut = newBufferBytes
 		}
+
 		if key != "" {
 			hash, err := ru.ComputeHash(ctx, bufOut, key)
 			if err != nil {
@@ -214,17 +196,25 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 			}
 			req.SetHeader("HashSHA256", hex.EncodeToString(hash))
 		}
-		ru.mu.Lock()
-		_, err = req.
-			SetBody(bufOut).
-			Post(curl)
-		if err != nil {
-			log.Println("WARN: Can't connect to metrics server")
-		}
-		ru.mu.Unlock()
 
+		_, err = retryCfg.Retry(ctx, func(_ ...any) (any, error) {
+			_, err := req.SetBody(bufOut).Post(curl)
+			return nil, err
+		})
+
+		if err != nil {
+			log.Printf("WARN: Failed to send metric after retries: %v", err)
+		}
 	}
 	return nil
+}
+
+func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
+	defer wg.Done()
+
+	if err := ru.SendMetricGobCh(ctx, retryCfg, curl, f.Compress, f.Key); err != nil {
+		panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
+	}
 }
 
 func (ru *RuntimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
