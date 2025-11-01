@@ -52,6 +52,56 @@ var extMetrics = []string{
 	"CPUutilization1",
 }
 
+func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimemetrics.RuntimeUpdate, t1 chan struct{}, t2 chan struct{}, t3 chan struct{}) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for range t1 {
+			if err := metricsGen.GetMetrics(ctx, metrics, true); err != nil {
+				panic(err)
+			}
+
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for range t2 {
+			if err := metricsGen.GetMetrics(ctx, metrics, false); err != nil {
+				panic(err)
+			}
+
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for range t3 {
+			metricsGen.GeneratorBatch(ctx)
+		}
+	}()
+
+}
+
+func workerInital(ctx context.Context, id int, jobs <-chan func()) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			log.Println("run worker ", id)
+			for j := range jobs {
+				log.Println("worker ", id, "run job")
+				j()
+				log.Println("complete job by worker", id)
+			}
+		}
+	}
+
+}
+
 func main() {
 
 	if _, err := cpu.Percent(0, false); err != nil {
@@ -81,46 +131,79 @@ func main() {
 
 	f := clientconfig.InitialFlags()
 	f.ParseFlags()
-	metricsGen := runtimemetrics.NewRuntimeUpdater(newService, f.RateLimit)
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			metricsGen.ParseMetrics(ctx, f, extMetrics, true)
-		}
-	}()
+	tickerReport := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
+	tickerPoll := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
+
+	defer tickerReport.Stop()
+	defer tickerPoll.Stop()
+
+	tickerPoll1 := make(chan struct{})
+	tickerPoll2 := make(chan struct{})
+	tickerReport1 := make(chan struct{})
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			metricsGen.ParseMetrics(ctx, f, metrics, false)
+		var wgIns sync.WaitGroup
+		for range tickerReport.C {
+			wgIns.Add(1)
+			go func() {
+				defer wgIns.Done()
+				tickerPoll1 <- struct{}{}
+			}()
+			wgIns.Add(1)
+			go func() {
+				defer wgIns.Done()
+				tickerPoll2 <- struct{}{}
+			}()
+			wgIns.Wait()
+			wgIns.Add(1)
+			go func() {
+				defer wgIns.Done()
+				tickerReport1 <- struct{}{}
+			}()
+			wgIns.Wait()
 		}
+
 	}()
+
+	metricsGen := runtimemetrics.NewRuntimeUpdater(newService, f.RateLimit)
+
+	parseMetrics(ctx, &wg, metricsGen, tickerPoll1, tickerPoll2, tickerReport1)
+
+	jobs := make(chan func())
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		var wgIt sync.WaitGroup
-		ticker := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
-		curl := fmt.Sprintf("http://%v%v/updates/", f.GetHost(), f.GetPort())
-		defer ticker.Stop()
-		for range ticker.C {
-			for worker := range metricsGen.GetRateLimit() {
-				wgIt.Add(1)
-				workerIt := worker
-				go metricsGen.Sender(ctx, &wg, workerIt, ticker, retryCfg, curl, f)
-			}
-			wgIt.Wait()
+		for worker := range metricsGen.GetRateLimit() {
+			wgIt.Add(1)
+			workerIt := worker
+			go workerInital(ctx, workerIt, jobs)
 		}
+		wgIt.Wait()
+	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		curl := fmt.Sprintf("http://%v%v/updates/", f.GetHost(), f.GetPort())
+	sendLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				close(jobs)
+				break sendLoop
+			default:
+				jobs <- func() {
+					metricsGen.Sender(ctx, &wg, retryCfg, curl, f)
+				}
+			}
+		}
 	}()
 
 	wg.Wait()

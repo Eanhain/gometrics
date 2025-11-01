@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -161,16 +160,14 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 	return nil
 }
 
-func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, worker int, ticker *time.Ticker, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
+func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
 	defer wg.Done()
 	select {
 	case <-ctx.Done():
 		return
 	default:
 		if _, err := retryCfg.Retry(ctx, func(_ ...any) (any, error) {
-			log.Println("run goroutine", worker)
 			err := ru.SendMetricGobCh(ctx, curl, f.Compress, f.Key)
-			log.Println("done send")
 			return nil, err
 		}); err != nil {
 			panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
@@ -180,11 +177,16 @@ func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, worker 
 }
 
 func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compress string, key string) error {
-	var (
-		bufOut    []byte
-		newBuffer bytes.Buffer
-	)
+
 	for metrics := range ru.ChIn {
+		var (
+			bufOut    []byte
+			newBuffer bytes.Buffer
+		)
+		if len(metrics) == 0 {
+			return nil
+		}
+		// log.Println(metrics)
 		req := ru.client.R().SetHeader("Content-Type", "application/x-gob")
 		encoder := gob.NewEncoder(&newBuffer)
 		err := encoder.Encode(metrics)
@@ -219,18 +221,9 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 		if err != nil {
 			log.Println("WARN: Can't connect to metrics server")
 		}
+
 	}
 	return nil
-}
-
-func (ru *RuntimeUpdate) ParseMetrics(ctx context.Context, f clientconfig.ClientConfig, metrics []string, ext bool) {
-	if err := ru.GetMetrics(ctx, metrics, ext); err != nil {
-		panic(fmt.Errorf("runtime metrics loop: %w", err))
-	}
-	if !ext {
-		ru.GeneratorBatch(ctx)
-	}
-	log.Println("done parse")
 }
 
 func (ru *RuntimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
@@ -274,7 +267,7 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 	i := 10
 
 	for {
-
+		metrics = []metricsdto.Metrics{}
 		if len(keysCounter) <= i && len(keysCounter) > i-10 {
 			keysCounterIter = keysCounter[i-10:]
 		} else if i-10 >= len(keysCounter) {
@@ -302,7 +295,6 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 		}
 
 		metrics = append(metrics, gauges...)
-
 		ru.ChIn <- metrics
 
 		if i >= len(metricMaps) {
@@ -310,6 +302,7 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 		}
 		i += 10
 	}
+	log.Println("generate done")
 	return nil
 }
 
