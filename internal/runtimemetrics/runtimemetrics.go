@@ -184,6 +184,8 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 			newBuffer bytes.Buffer
 		)
 
+		log.Println("Metrics send", len(metrics))
+
 		req := ru.client.R().SetHeader("Content-Type", "application/x-gob")
 		encoder := gob.NewEncoder(&newBuffer)
 		err := encoder.Encode(metrics)
@@ -260,6 +262,8 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 	)
 
 	keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics(ctx)
+
+	log.Println("Metric count:", len(metricMaps))
 
 	i := 10
 
