@@ -113,7 +113,7 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			for worker := range metricsGen.GetRateLimit() {
-				wg.Add(1)
+				// wg.Add(1)
 				workerIt := worker
 				go metricsGen.Sender(ctx, &wg, workerIt, ticker, retryCfg, curl, f)
 			}
