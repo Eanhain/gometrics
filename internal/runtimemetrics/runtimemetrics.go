@@ -183,10 +183,7 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 			bufOut    []byte
 			newBuffer bytes.Buffer
 		)
-		if len(metrics) == 0 {
-			return nil
-		}
-		// log.Println(metrics)
+
 		req := ru.client.R().SetHeader("Content-Type", "application/x-gob")
 		encoder := gob.NewEncoder(&newBuffer)
 		err := encoder.Encode(metrics)
@@ -295,7 +292,9 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 		}
 
 		metrics = append(metrics, gauges...)
-		ru.ChIn <- metrics
+		if len(metrics) != 0 {
+			ru.ChIn <- metrics
+		}
 
 		if i >= len(metricMaps) {
 			break
