@@ -261,23 +261,23 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 
 	keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics(ctx)
 
-	i := 10
+	i := 20
 
 	for {
 		metrics = []metricsdto.Metrics{}
-		if len(keysCounter) <= i && len(keysCounter) > i-10 {
-			keysCounterIter = keysCounter[i-10:]
-		} else if i-10 >= len(keysCounter) {
+		if len(keysCounter) <= i && len(keysCounter) > i-20 {
+			keysCounterIter = keysCounter[i-20:]
+		} else if i-20 >= len(keysCounter) {
 			keysCounterIter = []string{}
 		} else {
-			keysCounterIter = keysCounter[i-10 : i]
+			keysCounterIter = keysCounter[i-20 : i]
 		}
-		if len(keysGauge) <= i && len(keysGauge) > i-10 {
-			keysGaugeIter = keysGauge[i-10:]
-		} else if i-10 >= len(keysGauge) {
+		if len(keysGauge) <= i && len(keysGauge) > i-20 {
+			keysGaugeIter = keysGauge[i-20:]
+		} else if i-20 >= len(keysGauge) {
 			keysGaugeIter = []string{}
 		} else {
-			keysGaugeIter = keysGauge[i-10 : i]
+			keysGaugeIter = keysGauge[i-20 : i]
 		}
 		counters, err := ru.AddCounter(keysCounterIter, metricMaps)
 		if err != nil {
@@ -299,7 +299,7 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 		if i >= len(metricMaps) {
 			break
 		}
-		i += 10
+		i += 20
 	}
 	log.Println("generate done")
 	return nil
