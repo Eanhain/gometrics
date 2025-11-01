@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -161,8 +160,7 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 	return nil
 }
 
-func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, worker int, ticker *time.Ticker, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
-	defer wg.Done()
+func (ru *RuntimeUpdate) Sender(ctx context.Context, worker int, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
 	select {
 	case <-ctx.Done():
 		return
