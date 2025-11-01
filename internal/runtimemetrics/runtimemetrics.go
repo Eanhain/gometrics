@@ -214,12 +214,14 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 			}
 			req.SetHeader("HashSHA256", hex.EncodeToString(hash))
 		}
+		ru.mu.Lock()
 		_, err = req.
 			SetBody(bufOut).
 			Post(curl)
 		if err != nil {
 			log.Println("WARN: Can't connect to metrics server")
 		}
+		ru.mu.Unlock()
 
 	}
 	return nil
