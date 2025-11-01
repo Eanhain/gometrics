@@ -162,7 +162,7 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 }
 
 func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, worker int, ticker *time.Ticker, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
-	defer wg.Done()
+	// defer wg.Done()
 	select {
 	case <-ctx.Done():
 		return
