@@ -15,7 +15,7 @@ type ClientConfig struct {
 	Addr           addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
 	Compress       string    `env:"compress" envDefault:"gzip"`
 	Key            string    `env:"KEY" envDefault:""`
-	RateLimit      int       `env:"RATE_LIMIT" envDefault:"1"`
+	RateLimit      int       `env:"RATE_LIMIT" envDefault:"5"`
 }
 
 func (o *ClientConfig) GetPort() string {
