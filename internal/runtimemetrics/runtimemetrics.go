@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -160,7 +161,8 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 	return nil
 }
 
-func (ru *RuntimeUpdate) Sender(ctx context.Context, worker int, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
+func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, worker int, ticker *time.Ticker, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
+	defer wg.Done()
 	select {
 	case <-ctx.Done():
 		return
@@ -168,6 +170,7 @@ func (ru *RuntimeUpdate) Sender(ctx context.Context, worker int, retryCfg retry.
 		if _, err := retryCfg.Retry(ctx, func(_ ...any) (any, error) {
 			log.Println("run goroutine", worker)
 			err := ru.SendMetricGobCh(ctx, curl, f.Compress, f.Key)
+			log.Println("done send")
 			return nil, err
 		}); err != nil {
 			panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
@@ -227,6 +230,7 @@ func (ru *RuntimeUpdate) ParseMetrics(ctx context.Context, f clientconfig.Client
 	if !ext {
 		ru.GeneratorBatch(ctx)
 	}
+	log.Println("done parse")
 }
 
 func (ru *RuntimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
