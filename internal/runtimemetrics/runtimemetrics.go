@@ -159,8 +159,7 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 	}
 	return nil
 }
-func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, retryCfg retry.RetryConfig, curl string, compress string, key string) error {
-	client := resty.New()
+func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compress string, key string) error {
 
 	for metrics := range ru.ChIn {
 		var (
@@ -168,7 +167,7 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, retryCfg retry.Ret
 			newBuffer bytes.Buffer
 		)
 
-		req := client.R().SetHeader("Content-Type", "application/x-gob")
+		req := ru.client.R().SetHeader("Content-Type", "application/x-gob")
 		encoder := gob.NewEncoder(&newBuffer)
 		err := encoder.Encode(metrics)
 		newBufferBytes := newBuffer.Bytes()
@@ -196,12 +195,13 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, retryCfg retry.Ret
 			}
 			req.SetHeader("HashSHA256", hex.EncodeToString(hash))
 		}
-
+		ru.mu.Lock()
+		retryCfg := retry.DefaultConfig()
 		_, err = retryCfg.Retry(ctx, func(_ ...any) (any, error) {
 			_, err := req.SetBody(bufOut).Post(curl)
 			return nil, err
 		})
-
+		ru.mu.Unlock()
 		if err != nil {
 			log.Printf("WARN: Failed to send metric after retries: %v", err)
 		}
@@ -209,10 +209,10 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, retryCfg retry.Ret
 	return nil
 }
 
-func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, retryCfg retry.RetryConfig, curl string, f clientconfig.ClientConfig) {
+func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, curl string, f clientconfig.ClientConfig) {
 	defer wg.Done()
 
-	if err := ru.SendMetricGobCh(ctx, retryCfg, curl, f.Compress, f.Key); err != nil {
+	if err := ru.SendMetricGobCh(ctx, curl, f.Compress, f.Key); err != nil {
 		panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
 	}
 }

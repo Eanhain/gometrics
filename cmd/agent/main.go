@@ -205,7 +205,7 @@ func main() {
 				break sendLoop
 			default:
 				jobs <- func() {
-					metricsGen.Sender(ctx, &wg, retryCfg, curl, f)
+					metricsGen.Sender(ctx, &wg, curl, f)
 				}
 			}
 		}
