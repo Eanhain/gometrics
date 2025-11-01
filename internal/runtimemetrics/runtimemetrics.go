@@ -301,7 +301,6 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 		}
 		i += 10
 	}
-	log.Println("generate done")
 	return nil
 }
 

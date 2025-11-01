@@ -60,7 +60,7 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 			if err := metricsGen.GetMetrics(ctx, metrics, true); err != nil {
 				panic(err)
 			}
-
+			log.Println("read common metrics")
 		}
 	}()
 
@@ -71,7 +71,7 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 			if err := metricsGen.GetMetrics(ctx, metrics, false); err != nil {
 				panic(err)
 			}
-
+			log.Println("read ext metrics")
 		}
 	}()
 
@@ -79,7 +79,10 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 	go func() {
 		defer wg.Done()
 		for range t3 {
-			metricsGen.GeneratorBatch(ctx)
+			if err := metricsGen.GeneratorBatch(ctx); err != nil {
+				panic(err)
+			}
+			log.Println("generate done")
 		}
 	}()
 
@@ -148,7 +151,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		var wgIns sync.WaitGroup
-		for range tickerReport.C {
+		for range tickerPoll.C {
 			wgIns.Add(1)
 			go func() {
 				defer wgIns.Done()
@@ -160,14 +163,16 @@ func main() {
 				tickerPoll2 <- struct{}{}
 			}()
 			wgIns.Wait()
-			wgIns.Add(1)
-			go func() {
-				defer wgIns.Done()
-				tickerReport1 <- struct{}{}
-			}()
-			wgIns.Wait()
 		}
 
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for range tickerReport.C {
+			tickerReport1 <- struct{}{}
+		}
 	}()
 
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newService, f.RateLimit)
