@@ -57,7 +57,7 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 	go func() {
 		defer wg.Done()
 		for range t1 {
-			if err := metricsGen.GetMetrics(ctx, metrics, true); err != nil {
+			if err := metricsGen.GetMetrics(ctx, extMetrics, true); err != nil {
 				panic(err)
 			}
 			log.Println("read common metrics")
