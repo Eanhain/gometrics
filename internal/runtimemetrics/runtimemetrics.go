@@ -60,7 +60,6 @@ func (ru *RuntimeUpdate) FillRepoExt(ctx context.Context, metrics []string) erro
 		return err
 	}
 	cpuPercent, err := cpu.Percent(0, false)
-	// fmt.Println(cpuPercent)
 	if err != nil {
 		return err
 	}
@@ -99,6 +98,7 @@ func (ru *RuntimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
 
 func (ru *RuntimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 	runtime.ReadMemStats(&ru.memMetrics)
+	metricsGauge := make(map[string]float64, len(metrics))
 	v := reflect.ValueOf(ru.memMetrics)
 	for _, metricName := range metrics {
 		metricValue := v.FieldByName(metricName)
@@ -107,17 +107,21 @@ func (ru *RuntimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 			return ValueNotFound
 		}
 		value, err := ru.ParseGauge(metricValue)
+		metricsGauge[metricName] = value
 		if err != nil {
 			return err
 		}
-		ru.mu.Lock()
-		err = ru.service.GaugeInsert(ctx, strings.ToLower(metricName), value)
-		if err != nil {
-			ru.mu.Unlock()
-			return err
-		}
-		ru.mu.Unlock()
+
 	}
+	ru.mu.Lock()
+	defer ru.mu.Unlock()
+	for key, value := range metricsGauge {
+		err := ru.service.GaugeInsert(ctx, key, value)
+		if err != nil {
+		}
+		return err
+	}
+
 	return nil
 }
 
