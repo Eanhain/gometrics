@@ -111,7 +111,8 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 
 }
 
-func workerInital(ctx context.Context, id int, jobs <-chan func()) {
+func workerInital(ctx context.Context, wg *sync.WaitGroup, id int, jobs <-chan func()) {
+	defer wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
@@ -170,6 +171,10 @@ func main() {
 	tickerPoll1 := make(chan struct{})
 	tickerPoll2 := make(chan struct{})
 	tickerReport1 := make(chan struct{})
+	defer close(tickerPoll1)
+	defer close(tickerPoll2)
+	defer close(tickerReport1)
+
 	stop := make(chan os.Signal, 1)
 
 	wg.Add(1)
@@ -213,7 +218,7 @@ func main() {
 		for worker := range metricsGen.GetRateLimit() {
 			wgIt.Add(1)
 			workerIt := worker
-			go workerInital(ctx, workerIt, jobs)
+			go workerInital(ctx, &wgIt, workerIt, jobs)
 		}
 		wgIt.Wait()
 	}()
@@ -230,7 +235,7 @@ func main() {
 				break sendLoop
 			default:
 				jobs <- func() {
-					metricsGen.Sender(ctx, &wg, curl, f)
+					metricsGen.Sender(ctx, curl, f)
 				}
 			}
 		}

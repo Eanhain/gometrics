@@ -211,9 +211,7 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 	return nil
 }
 
-func (ru *RuntimeUpdate) Sender(ctx context.Context, wg *sync.WaitGroup, curl string, f clientconfig.ClientConfig) {
-	defer wg.Done()
-
+func (ru *RuntimeUpdate) Sender(ctx context.Context, curl string, f clientconfig.ClientConfig) {
 	if err := ru.SendMetricGobCh(ctx, curl, f.Compress, f.Key); err != nil {
 		panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
 	}
