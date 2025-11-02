@@ -221,12 +221,12 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer close(jobs)
 		curl := fmt.Sprintf("http://%v%v/updates/", f.GetHost(), f.GetPort())
 	sendLoop:
 		for {
 			select {
 			case <-ctx.Done():
-				close(jobs)
 				break sendLoop
 			default:
 				jobs <- func() {
