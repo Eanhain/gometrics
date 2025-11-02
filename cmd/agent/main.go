@@ -10,7 +10,10 @@ import (
 	"gometrics/internal/service"
 	"gometrics/internal/storage"
 	"log"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -57,10 +60,16 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 	go func() {
 		defer wg.Done()
 		for range t1 {
-			if err := metricsGen.GetMetrics(ctx, extMetrics, true); err != nil {
-				panic(err)
+			select {
+			case <-ctx.Done():
+				log.Println("Graceful shutdown common metric sender")
+				return
+			default:
+				if err := metricsGen.GetMetrics(ctx, extMetrics, true); err != nil {
+					panic(err)
+				}
+				log.Println("read common metrics")
 			}
-			log.Println("read common metrics")
 		}
 	}()
 
@@ -68,21 +77,35 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 	go func() {
 		defer wg.Done()
 		for range t2 {
-			if err := metricsGen.GetMetrics(ctx, metrics, false); err != nil {
-				panic(err)
+			select {
+			case <-ctx.Done():
+				log.Println("Graceful shutdown ext metric sender")
+				return
+			default:
+				if err := metricsGen.GetMetrics(ctx, metrics, false); err != nil {
+					panic(err)
+				}
+				log.Println("read ext metrics")
 			}
-			log.Println("read ext metrics")
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer metricsGen.CloseChannel(ctx)
 		for range t3 {
-			if err := metricsGen.GetMetricsBatch(ctx); err != nil {
-				panic(err)
+			select {
+			case <-ctx.Done():
+				log.Println("Graceful shutdown metric generator")
+				return
+			default:
+				if err := metricsGen.GetMetricsBatch(ctx); err != nil {
+					panic(err)
+				}
+				log.Println("generate done")
 			}
-			log.Println("generate done")
+
 		}
 	}()
 
@@ -92,6 +115,7 @@ func workerInital(ctx context.Context, id int, jobs <-chan func()) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("close worker ", id)
 			return
 		default:
 			log.Println("run worker ", id)
@@ -111,7 +135,7 @@ func main() {
 		panic(err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	retryCfg := retry.DefaultConfig()
 
@@ -146,6 +170,7 @@ func main() {
 	tickerPoll1 := make(chan struct{})
 	tickerPoll2 := make(chan struct{})
 	tickerReport1 := make(chan struct{})
+	stop := make(chan os.Signal, 1)
 
 	wg.Add(1)
 	go func() {
@@ -210,6 +235,11 @@ func main() {
 			}
 		}
 	}()
+
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+	log.Println("Graceful shutdown is initialized")
+	cancel()
 
 	wg.Wait()
 }

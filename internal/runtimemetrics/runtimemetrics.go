@@ -292,6 +292,10 @@ func (ru *RuntimeUpdate) SendBatch(ctx context.Context, metrics []metricsdto.Met
 	}
 }
 
+func (ru *RuntimeUpdate) CloseChannel(ctx context.Context) {
+	close(ru.ChIn)
+}
+
 func (ru *RuntimeUpdate) ConvertToDTO(ctx context.Context, keysCounterIter []string, keysGaugeIter []string, metricMaps map[string]string) ([]metricsdto.Metrics, error) {
 	metrics := []metricsdto.Metrics{}
 	counters, err := ru.AddCounter(keysCounterIter, metricMaps)
