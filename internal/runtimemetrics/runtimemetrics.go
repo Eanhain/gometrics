@@ -118,8 +118,9 @@ func (ru *RuntimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 	for key, value := range metricsGauge {
 		err := ru.service.GaugeInsert(ctx, key, value)
 		if err != nil {
+			return err
 		}
-		return err
+
 	}
 
 	return nil
