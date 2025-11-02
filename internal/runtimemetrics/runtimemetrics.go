@@ -245,22 +245,17 @@ func (ru *RuntimeUpdate) AddCounter(keys []string, metrics map[string]string) (o
 	return output, nil
 }
 
-func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
-
+func (ru *RuntimeUpdate) GetMetricsBatch(ctx context.Context) error {
 	var (
 		keysCounterIter []string
 		keysGaugeIter   []string
-		metrics         []metricsdto.Metrics
 	)
 
 	keysGauge, keysCounter, metricMaps := ru.service.GetAllMetrics(ctx)
 
-	log.Println("Metric count:", len(metricMaps))
-
 	i := 10
 
 	for {
-		metrics = []metricsdto.Metrics{}
 		if len(keysCounter) <= i && len(keysCounter) > i-10 {
 			keysCounterIter = keysCounter[i-10:]
 		} else if i-10 >= len(keysCounter) {
@@ -275,22 +270,11 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 		} else {
 			keysGaugeIter = keysGauge[i-10 : i]
 		}
-		counters, err := ru.AddCounter(keysCounterIter, metricMaps)
+		err, metrics := ru.ConvertToDTO(ctx, keysCounterIter, keysGaugeIter, metricMaps)
 		if err != nil {
-			panic(fmt.Errorf("error with SendMetricsGob %v", err))
+			panic(err)
 		}
-		metrics = append(metrics, counters...)
-
-		gauges, err := ru.AddGauge(keysGaugeIter, metricMaps)
-
-		if err != nil {
-			panic(fmt.Errorf("error with SendMetricsGob %v", err))
-		}
-
-		metrics = append(metrics, gauges...)
-		if len(metrics) != 0 {
-			ru.ChIn <- metrics
-		}
+		ru.SendBatch(ctx, metrics)
 
 		if i >= len(metricMaps) {
 			break
@@ -298,6 +282,30 @@ func (ru *RuntimeUpdate) GeneratorBatch(ctx context.Context) error {
 		i += 10
 	}
 	return nil
+}
+
+func (ru *RuntimeUpdate) SendBatch(ctx context.Context, metrics []metricsdto.Metrics) {
+	if len(metrics) != 0 {
+		ru.ChIn <- metrics
+	}
+	return
+}
+
+func (ru *RuntimeUpdate) ConvertToDTO(ctx context.Context, keysCounterIter []string, keysGaugeIter []string, metricMaps map[string]string) (error, []metricsdto.Metrics) {
+	metrics := []metricsdto.Metrics{}
+	counters, err := ru.AddCounter(keysCounterIter, metricMaps)
+	if err != nil {
+		return fmt.Errorf("error with SendMetricsGob %v", err), nil
+	}
+	metrics = append(metrics, counters...)
+
+	gauges, err := ru.AddGauge(keysGaugeIter, metricMaps)
+
+	if err != nil {
+		return fmt.Errorf("error with SendMetricsGob %v", err), nil
+	}
+	metrics = append(metrics, gauges...)
+	return nil, metrics
 }
 
 func (ru *RuntimeUpdate) GetRateLimit() int {

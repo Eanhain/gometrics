@@ -79,7 +79,7 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 	go func() {
 		defer wg.Done()
 		for range t3 {
-			if err := metricsGen.GeneratorBatch(ctx); err != nil {
+			if err := metricsGen.GetMetricsBatch(ctx); err != nil {
 				panic(err)
 			}
 			log.Println("generate done")
