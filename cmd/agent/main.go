@@ -71,6 +71,8 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 				log.Println("read common metrics")
 			}
 		}
+		<-ctx.Done()
+		log.Println("Graceful shutdown common metric sender")
 	}()
 
 	wg.Add(1)
@@ -88,6 +90,9 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 				log.Println("read ext metrics")
 			}
 		}
+		<-ctx.Done()
+		log.Println("Graceful shutdown ext metric sender")
+
 	}()
 
 	wg.Add(1)
@@ -107,6 +112,8 @@ func parseMetrics(ctx context.Context, wg *sync.WaitGroup, metricsGen *runtimeme
 			}
 
 		}
+		<-ctx.Done()
+		log.Println("Graceful shutdown metric generator")
 	}()
 
 }
@@ -116,15 +123,13 @@ func workerInital(ctx context.Context, wg *sync.WaitGroup, id int, jobs <-chan f
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("close worker ", id)
 			return
 		default:
 			log.Println("run worker ", id)
 			for j := range jobs {
-				log.Println("worker ", id, "run job")
 				j()
-				log.Println("complete job by worker", id)
 			}
+			log.Println("jobs done", id)
 		}
 	}
 
@@ -165,15 +170,9 @@ func main() {
 	tickerReport := time.NewTicker(time.Duration(f.ReportInterval) * time.Second)
 	tickerPoll := time.NewTicker(time.Duration(f.PollInterval) * time.Second)
 
-	defer tickerReport.Stop()
-	defer tickerPoll.Stop()
-
 	tickerPoll1 := make(chan struct{})
 	tickerPoll2 := make(chan struct{})
 	tickerReport1 := make(chan struct{})
-	defer close(tickerPoll1)
-	defer close(tickerPoll2)
-	defer close(tickerReport1)
 
 	stop := make(chan os.Signal, 1)
 
@@ -181,18 +180,27 @@ func main() {
 	go func() {
 		defer wg.Done()
 		var wgIns sync.WaitGroup
-		for range tickerPoll.C {
-			wgIns.Add(1)
-			go func() {
-				defer wgIns.Done()
-				tickerPoll1 <- struct{}{}
-			}()
-			wgIns.Add(1)
-			go func() {
-				defer wgIns.Done()
-				tickerPoll2 <- struct{}{}
-			}()
-			wgIns.Wait()
+		for {
+			select {
+			case <-tickerPoll.C:
+				wgIns.Add(1)
+				go func() {
+					defer wgIns.Done()
+					tickerPoll1 <- struct{}{}
+				}()
+				wgIns.Add(1)
+				go func() {
+					defer wgIns.Done()
+					tickerPoll2 <- struct{}{}
+				}()
+				wgIns.Wait()
+			case <-ctx.Done():
+				close(tickerPoll1)
+				close(tickerPoll2)
+				log.Println("ticker pool fanout closed")
+				return
+
+			}
 		}
 
 	}()
@@ -200,16 +208,26 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for range tickerReport.C {
-			tickerReport1 <- struct{}{}
+
+		for {
+			select {
+			case <-tickerReport.C:
+				tickerReport1 <- struct{}{}
+			case <-ctx.Done():
+				close(tickerReport1)
+				log.Println("ticker report fanout closed")
+				return
+
+			}
 		}
+
 	}()
 
 	metricsGen := runtimemetrics.NewRuntimeUpdater(newService, f.RateLimit)
 
 	parseMetrics(ctx, &wg, metricsGen, tickerPoll1, tickerPoll2, tickerReport1)
 
-	jobs := make(chan func())
+	jobs := make(chan func(), f.RateLimit)
 
 	wg.Add(1)
 	go func() {
@@ -221,6 +239,7 @@ func main() {
 			go workerInital(ctx, &wgIt, workerIt, jobs)
 		}
 		wgIt.Wait()
+		log.Println("all workers closed")
 	}()
 
 	wg.Add(1)
@@ -233,18 +252,21 @@ func main() {
 			select {
 			case <-ctx.Done():
 				break sendLoop
-			default:
-				jobs <- func() {
-					metricsGen.Sender(ctx, curl, f)
-				}
+			case jobs <- func() {
+				metricsGen.Sender(ctx, curl, f)
+			}:
+
 			}
 		}
+		log.Println("jobs sender closed")
 	}()
 
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	log.Println("Graceful shutdown is initialized")
 	cancel()
+	tickerReport.Stop()
+	tickerPoll.Stop()
 
 	wg.Wait()
 }

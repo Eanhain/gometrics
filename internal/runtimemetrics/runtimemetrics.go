@@ -274,6 +274,7 @@ func (ru *RuntimeUpdate) GetMetricsBatch(ctx context.Context) error {
 		if err != nil {
 			panic(err)
 		}
+
 		ru.SendBatch(ctx, metrics)
 
 		if i >= len(metricMaps) {
