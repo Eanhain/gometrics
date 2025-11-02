@@ -270,7 +270,7 @@ func (ru *RuntimeUpdate) GetMetricsBatch(ctx context.Context) error {
 		} else {
 			keysGaugeIter = keysGauge[i-10 : i]
 		}
-		err, metrics := ru.ConvertToDTO(ctx, keysCounterIter, keysGaugeIter, metricMaps)
+		metrics, err := ru.ConvertToDTO(ctx, keysCounterIter, keysGaugeIter, metricMaps)
 		if err != nil {
 			panic(err)
 		}
@@ -288,24 +288,23 @@ func (ru *RuntimeUpdate) SendBatch(ctx context.Context, metrics []metricsdto.Met
 	if len(metrics) != 0 {
 		ru.ChIn <- metrics
 	}
-	return
 }
 
-func (ru *RuntimeUpdate) ConvertToDTO(ctx context.Context, keysCounterIter []string, keysGaugeIter []string, metricMaps map[string]string) (error, []metricsdto.Metrics) {
+func (ru *RuntimeUpdate) ConvertToDTO(ctx context.Context, keysCounterIter []string, keysGaugeIter []string, metricMaps map[string]string) ([]metricsdto.Metrics, error) {
 	metrics := []metricsdto.Metrics{}
 	counters, err := ru.AddCounter(keysCounterIter, metricMaps)
 	if err != nil {
-		return fmt.Errorf("error with SendMetricsGob %v", err), nil
+		return nil, fmt.Errorf("error with SendMetricsGob %v", err)
 	}
 	metrics = append(metrics, counters...)
 
 	gauges, err := ru.AddGauge(keysGaugeIter, metricMaps)
 
 	if err != nil {
-		return fmt.Errorf("error with SendMetricsGob %v", err), nil
+		return nil, fmt.Errorf("error with SendMetricsGob %v", err)
 	}
 	metrics = append(metrics, gauges...)
-	return nil, metrics
+	return metrics, nil
 }
 
 func (ru *RuntimeUpdate) GetRateLimit() int {
