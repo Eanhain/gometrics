@@ -144,17 +144,14 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 				return fmt.Errorf("collect runtime metrics: %w", err)
 			}
 			ru.mu.Lock()
+			defer ru.mu.Unlock()
 			if err := ru.service.CounterInsert(ctx, "PollCount", 1); err != nil {
-				ru.mu.Unlock()
+
 				return fmt.Errorf("update counter PollCount: %w", err)
 			}
-			ru.mu.Unlock()
-			ru.mu.Lock()
 			if err := ru.service.GaugeInsert(ctx, "RandomValue", rand.Float64()); err != nil {
-				ru.mu.Unlock()
 				return fmt.Errorf("update gauge RandomValue: %w", err)
 			}
-			ru.mu.Unlock()
 		} else {
 			if err := ru.FillRepoExt(ctx, metrics); err != nil {
 				return fmt.Errorf("collect runtime metrics: %w", err)
