@@ -27,3 +27,7 @@ vendor/
 
 /metrics_storage
 cmd/server/metrics_storage
+
+main
+metricstest
+.DS_Store

@@ -14,6 +14,7 @@ type ServerConfigs struct {
 	FilePath    string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"`
 	Restore     bool      `env:"RESTORE" envDefault:"true"`
 	DatabaseDSN string    `env:"DATABASE_DSN" envDefault:""`
+	Key         string    `env:"KEY" envDefault:""`
 }
 
 func (o *ServerConfigs) GetPort() string {
@@ -38,10 +39,17 @@ func (o *ServerConfigs) ParseFlags() {
 	if err := env.Parse(o); err != nil {
 		fmt.Println("env vars not found")
 	}
+
+	envKey := o.Key
 	flag.Var(&o.Addr, "a", "Host and port for connect/create")
 	flag.IntVar(&o.StoreInter, "i", o.StoreInter, "Flush metrics interval")
 	flag.StringVar(&o.FilePath, "f", o.FilePath, "Metrics store file destination")
 	flag.StringVar(&o.DatabaseDSN, "d", o.DatabaseDSN, "DB connection string")
+	flag.StringVar(&o.Key, "k", o.Key, "Cipher key")
 	flag.BoolVar(&o.Restore, "r", o.Restore, "Restore metrics from json file")
 	flag.Parse()
+
+	if envKey != "" {
+		o.Key = envKey
+	}
 }
