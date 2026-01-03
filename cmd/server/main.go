@@ -14,6 +14,7 @@ import (
 	"gometrics/internal/signature"
 	"gometrics/internal/storage"
 	"net/http"
+	_ "net/http/pprof"
 	"sync"
 	"time"
 
