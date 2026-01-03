@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
@@ -95,6 +96,8 @@ func main() {
 	newMux.Use(myCompress.GzipHandleWriter)
 
 	newMux.Use(myCompress.GzipHandleReader)
+
+	newMux.Mount("/debug", middleware.Profiler())
 
 	defer newService.StorageCloser()
 
