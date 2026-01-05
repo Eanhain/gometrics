@@ -2,19 +2,19 @@ package compress
 
 import (
 	"bytes"
+	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"go.uber.org/zap"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func BenchmarkGzipWriter(b *testing.B) {
-	log, _ := zap.NewDevelopment()
-	logS := log.Sugar()
-	jsonExample := strings.Repeat(`
+// Тестовые данные вынесем, чтобы не дублировать
+var jsonExample = `
 		[
 			{
 				"id": "LastGC",
@@ -176,54 +176,133 @@ func BenchmarkGzipWriter(b *testing.B) {
 				"type": "counter",
 				"delta": 23204
 			}
-		]`, 100)
-	b.Run("Reader bench", func(b *testing.B) {
+		]`
 
-		jsonCompress, err := Compress([]byte(jsonExample))
-		if err != nil {
-			panic(err)
-		}
+// --- UNIT TESTS ---
 
-		nextHandlerReader := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, err := io.ReadAll(r.Body)
+func TestGzipMiddleware(t *testing.T) {
+	// 1. Тест GzipHandleReader (Распаковка входящего тела)
+	t.Run("GzipReader decompress request body", func(t *testing.T) {
+		// Сжимаем данные "клиентом"
+		compressedData, err := Compress([]byte(jsonExample))
+		require.NoError(t, err)
+
+		// Хендлер, который должен получить уже РАСПАКОВАННЫЕ данные
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
 			defer r.Body.Close()
-			if err != nil {
-				logS.Errorln(err)
-			}
 
+			// Проверяем, что middleware действительно распаковал данные
+			assert.JSONEq(t, jsonExample, string(body), "Body should match original JSON")
 		})
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			recorder := httptest.NewRecorder()
-			jsonBuffer := bytes.NewBuffer(jsonCompress)
-			req := httptest.NewRequest("GET", "http://testing", jsonBuffer)
-			req.Header.Add("Content-Type", "application/json")
-			req.Header.Add("Content-Encoding", "gzip")
-			gzHandlerReader := GzipHandleReader(nextHandlerReader)
-			gzHandlerReader.ServeHTTP(recorder, req)
-		}
 
+		// Создаем запрос с заголовком Content-Encoding: gzip
+		req := httptest.NewRequest("POST", "/", bytes.NewReader(compressedData))
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		// Запускаем через middleware
+		GzipHandleReader(mockHandler).ServeHTTP(w, req)
 	})
 
-	b.Run("Writer bench", func(b *testing.B) {
-		nextHandlerWriter := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			bodyStr := jsonExample
-			_, err := w.Write([]byte(bodyStr))
-			if err != nil {
-				logS.Errorln(err)
-			}
-
+	// 2. Тест GzipHandleWriter (Сжатие исходящего ответа)
+	t.Run("GzipWriter compress response body", func(t *testing.T) {
+		// Хендлер, который пишет обычный JSON
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(jsonExample))
 		})
-		gzHandlerWriter := GzipHandleWriter(nextHandlerWriter)
+
+		// Создаем запрос с Accept-Encoding: gzip
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+		w := httptest.NewRecorder()
+
+		// Запускаем через middleware
+		GzipHandleWriter(mockHandler).ServeHTTP(w, req)
+
+		// Проверяем заголовки
+		resp := w.Result()
+		assert.Equal(t, "gzip", resp.Header.Get("Content-Encoding"))
+
+		// Читаем и распаковываем ответ "клиентом"
+		gzReader, err := gzip.NewReader(resp.Body)
+		require.NoError(t, err)
+		defer gzReader.Close()
+
+		decompressedBody, err := io.ReadAll(gzReader)
+		require.NoError(t, err)
+
+		// Проверяем содержимое
+		assert.JSONEq(t, jsonExample, string(decompressedBody))
+	})
+
+	// 3. Тест без сжатия (если клиент не просит)
+	t.Run("No gzip if not requested", func(t *testing.T) {
+		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("hello"))
+		})
+
+		req := httptest.NewRequest("GET", "/", nil)
+		// НЕ ставим Accept-Encoding
+		w := httptest.NewRecorder()
+
+		GzipHandleWriter(mockHandler).ServeHTTP(w, req)
+
+		resp := w.Result()
+		assert.Empty(t, resp.Header.Get("Content-Encoding"))
+		assert.Equal(t, "hello", w.Body.String())
+	})
+}
+
+// --- BENCHMARKS ---
+
+func BenchmarkGzip(b *testing.B) {
+	// Подготовка данных (большой JSON)
+	bigJson := strings.Repeat(jsonExample, 10)
+	compressedData, _ := Compress([]byte(bigJson))
+
+	b.Run("GzipReader_Middleware", func(b *testing.B) {
+		// Хендлер-заглушка, просто читает Body
+		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			io.Copy(io.Discard, r.Body)
+			r.Body.Close()
+		})
+
+		handler := GzipHandleReader(nextHandler)
+
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
+			// В бенчмарке создание запроса тоже занимает время,
+			// но выносить его полностью сложно, т.к. Body вычитывается.
+			// bytes.NewReader - дешевая операция.
+			req := httptest.NewRequest("POST", "/", bytes.NewReader(compressedData))
+			req.Header.Set("Content-Encoding", "gzip")
 
-			recorder := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "http://testing", nil)
-			req.Header.Add("Content-Type", "application/json")
-			req.Header.Add("Accept-Encoding", "gzip")
+			// Используем легкий Recorder, чтобы не тратить память на запись ответа
+			w := httptest.NewRecorder()
 
-			gzHandlerWriter.ServeHTTP(recorder, req)
+			handler.ServeHTTP(w, req)
+		}
+	})
+
+	b.Run("GzipWriter_Middleware", func(b *testing.B) {
+		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(bigJson))
+		})
+
+		handler := GzipHandleWriter(nextHandler)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
 		}
 	})
 }

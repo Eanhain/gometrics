@@ -1,11 +1,42 @@
 package compress
 
 import (
+	"bytes"
 	"compress/gzip"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
+
+type gzipWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+var gzPoolWriter = sync.Pool{
+	New: func() any {
+		w := gzip.NewWriter(io.Discard)
+		gzip.NewWriterLevel(w, gzip.BestSpeed)
+		return w
+	},
+}
+
+var emptyGzip = []byte{
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0xff, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00,
+	0x00, 0x00,
+}
+
+var gzPoolReader = sync.Pool{
+	New: func() any {
+		r, err := gzip.NewReader(bytes.NewReader(emptyGzip))
+		if err != nil {
+			panic(err)
+		}
+		return r
+	},
+}
 
 func GzipHandleReader(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -13,20 +44,16 @@ func GzipHandleReader(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		gz, err := gzip.NewReader(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		gz := gzPoolReader.Get().(*gzip.Reader)
+
+		defer gzPoolReader.Put(gz)
+
+		gz.Reset(r.Body)
+
 		defer r.Body.Close()
 		r.Body = gz
 		next.ServeHTTP(w, r)
 	})
-}
-
-type gzipWriter struct {
-	http.ResponseWriter
-	Writer io.Writer
 }
 
 func (w gzipWriter) Write(b []byte) (int, error) {
@@ -50,16 +77,15 @@ func GzipHandleWriter(next http.Handler) http.Handler {
 			return
 		}
 
-		// создаём gzip.Writer поверх текущего w
-		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
-		if err != nil {
-			io.WriteString(w, err.Error())
-			return
-		}
+		w.Header().Set("Content-Encoding", "gzip")
+
+		gz := gzPoolWriter.Get().(*gzip.Writer)
+		defer gzPoolWriter.Put(gz)
+
+		gz.Reset(w)
 		defer gz.Close()
 
-		w.Header().Set("Content-Encoding", "gzip")
-		// передаём обработчику страницы переменную типа gzipWriter для вывода данных
-		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
+		next.ServeHTTP(&gzipWriter{ResponseWriter: w, Writer: gz}, r)
+
 	})
 }
