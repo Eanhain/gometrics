@@ -225,10 +225,12 @@ func TestGzipMiddleware(t *testing.T) {
 
 		// Проверяем заголовки
 		resp := w.Result()
+
 		assert.Equal(t, "gzip", resp.Header.Get("Content-Encoding"))
 
 		// Читаем и распаковываем ответ "клиентом"
 		gzReader, err := gzip.NewReader(resp.Body)
+		resp.Body.Close()
 		require.NoError(t, err)
 		defer gzReader.Close()
 
@@ -254,6 +256,7 @@ func TestGzipMiddleware(t *testing.T) {
 		resp := w.Result()
 		assert.Empty(t, resp.Header.Get("Content-Encoding"))
 		assert.Equal(t, "hello", w.Body.String())
+		resp.Body.Close()
 	})
 }
 
@@ -261,8 +264,8 @@ func TestGzipMiddleware(t *testing.T) {
 
 func BenchmarkGzip(b *testing.B) {
 	// Подготовка данных (большой JSON)
-	bigJson := strings.Repeat(jsonExample, 10)
-	compressedData, _ := Compress([]byte(bigJson))
+	bigJSON := strings.Repeat(jsonExample, 10)
+	compressedData, _ := Compress([]byte(bigJSON))
 
 	b.Run("GzipReader_Middleware", func(b *testing.B) {
 		// Хендлер-заглушка, просто читает Body
@@ -291,7 +294,7 @@ func BenchmarkGzip(b *testing.B) {
 	b.Run("GzipWriter_Middleware", func(b *testing.B) {
 		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(bigJson))
+			w.Write([]byte(bigJSON))
 		})
 
 		handler := GzipHandleWriter(nextHandler)
