@@ -3,10 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
-	"gometrics/internal/api/metricsdto"
 	"sort"
 	"strings"
 	"time"
+
+	"gometrics/internal/api/metricsdto"
 )
 
 type storage interface {

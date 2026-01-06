@@ -219,7 +219,6 @@ func TestGzipMiddleware(t *testing.T) {
 		req := httptest.NewRequest("GET", "/", nil)
 		req.Header.Set("Accept-Encoding", "gzip")
 		w := httptest.NewRecorder()
-
 		// Запускаем через middleware
 		GzipHandleWriter(mockHandler).ServeHTTP(w, req)
 

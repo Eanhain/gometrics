@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	metricsdto "gometrics/internal/api/metricsdto"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
+
+	metricsdto "gometrics/internal/api/metricsdto"
 )
 
 type PersistStorage struct {

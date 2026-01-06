@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	metricsdto "gometrics/internal/api/metricsdto"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+
+	metricsdto "gometrics/internal/api/metricsdto"
 
 	"encoding/gob"
 

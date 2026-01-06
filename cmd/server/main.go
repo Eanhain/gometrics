@@ -3,6 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
+	"sync"
+	"time"
+
 	myCompress "gometrics/internal/compress"
 	"gometrics/internal/db"
 	"gometrics/internal/handlers"
@@ -13,10 +18,6 @@ import (
 	"gometrics/internal/service"
 	"gometrics/internal/signature"
 	"gometrics/internal/storage"
-	"net/http"
-	_ "net/http/pprof"
-	"sync"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"

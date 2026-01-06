@@ -3,18 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
-	"gometrics/internal/clientconfig"
-	"gometrics/internal/persist"
-	"gometrics/internal/retry"
-	"gometrics/internal/runtimemetrics"
-	"gometrics/internal/service"
-	"gometrics/internal/storage"
 	"log"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
+
+	"gometrics/internal/clientconfig"
+	"gometrics/internal/persist"
+	"gometrics/internal/retry"
+	"gometrics/internal/runtimemetrics"
+	"gometrics/internal/service"
+	"gometrics/internal/storage"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 )
