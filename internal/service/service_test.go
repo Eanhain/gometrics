@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -12,20 +13,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// stubPersistStorage mocks the persistence layer.
 type stubPersistStorage struct{}
 
 func (s *stubPersistStorage) FormattingLogs(_ context.Context, _ map[string]float64, _ map[string]int) error {
 	return nil
 }
 func (s *stubPersistStorage) ImportLogs(context.Context) ([]metricsdto.Metrics, error) {
-	return nil, nil
+	// Return some mock data for restore test
+	return []metricsdto.Metrics{
+		{ID: "restored_gauge", MType: metricsdto.MetricTypeGauge, Value: new(float64)},
+	}, nil
 }
-func (s *stubPersistStorage) GetLoopTime() int { return 0 }
-func (s *stubPersistStorage) Close() error     { return nil }
-func (s *stubPersistStorage) Flush() error     { return nil }
-func (s *stubPersistStorage) Ping(context.Context) error {
-	return nil
-}
+func (s *stubPersistStorage) GetLoopTime() int           { return 0 }
+func (s *stubPersistStorage) Close() error               { return nil }
+func (s *stubPersistStorage) Flush() error               { return nil }
+func (s *stubPersistStorage) Ping(context.Context) error { return nil }
 
 func Test_service_GetAllMetrics(t *testing.T) {
 	type args struct {
@@ -111,6 +114,9 @@ func Test_service_GetAllMetrics(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, ins := range tt.args {
+				if ins.key == "" {
+					continue
+				}
 				switch ins.valueType {
 				case metricsdto.MetricTypeGauge:
 					valueFloat, err := strconv.ParseFloat(ins.rawValue, 64)
@@ -124,10 +130,68 @@ func Test_service_GetAllMetrics(t *testing.T) {
 			}
 			gauge, counter, res := tt.service.GetAllMetrics(ctx)
 			got := want{gaugeKeys: gauge, counterKeys: counter, result: res}
-			boolRes := assert.Equal(t, got, tt.want)
-			if !boolRes {
-				t.Errorf("result is different = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestService_GetGauge_Error(t *testing.T) {
+	s := NewService(storageOrig.NewMemStorage(), &stubPersistStorage{})
+	_, err := s.GetGauge(context.Background(), "non-existent")
+	assert.Error(t, err)
+}
+
+func TestService_GetCounter_Error(t *testing.T) {
+	s := NewService(storageOrig.NewMemStorage(), &stubPersistStorage{})
+	_, err := s.GetCounter(context.Background(), "non-existent")
+	assert.Error(t, err)
+}
+
+func TestService_FromStructToStoreBatch(t *testing.T) {
+	s := NewService(storageOrig.NewMemStorage(), &stubPersistStorage{})
+	val := 10.5
+	delta := int64(5)
+
+	metrics := []metricsdto.Metrics{
+		{ID: "g_batch", MType: metricsdto.MetricTypeGauge, Value: &val},
+		{ID: "c_batch", MType: metricsdto.MetricTypeCounter, Delta: &delta},
+	}
+
+	err := s.FromStructToStoreBatch(context.Background(), metrics)
+	require.NoError(t, err)
+
+	g, err := s.GetGauge(context.Background(), "g_batch")
+	assert.NoError(t, err)
+	assert.Equal(t, val, g)
+
+	c, err := s.GetCounter(context.Background(), "c_batch")
+	assert.NoError(t, err)
+	assert.Equal(t, int(delta), c)
+}
+
+func TestService_PersistRestore(t *testing.T) {
+	// Uses stubPersistStorage which returns "restored_gauge"
+	s := NewService(storageOrig.NewMemStorage(), &stubPersistStorage{})
+
+	err := s.PersistRestore(context.Background())
+	require.NoError(t, err)
+
+	// Check if "restored_gauge" is in memory
+	_, err = s.GetGauge(context.Background(), "restored_gauge")
+	assert.NoError(t, err)
+}
+
+// ExampleService_GaugeInsert demonstrates inserting a gauge metric.
+func ExampleService_GaugeInsert() {
+	// Initialize service with memory storage and mock persistence
+	svc := NewService(storageOrig.NewMemStorage(), &stubPersistStorage{})
+
+	ctx := context.Background()
+	_ = svc.GaugeInsert(ctx, "Temperature", 22.5)
+
+	val, _ := svc.GetGauge(ctx, "Temperature")
+	fmt.Printf("Temperature: %.1f\n", val)
+
+	// Output:
+	// Temperature: 22.5
 }

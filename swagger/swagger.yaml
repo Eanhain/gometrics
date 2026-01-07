@@ -1,0 +1,218 @@
+basePath: /
+definitions:
+  metricsdto.Metrics:
+    properties:
+      delta:
+        description: для counter
+        type: integer
+      id:
+        type: string
+      type:
+        description: '"gauge" | "counter"'
+        type: string
+      value:
+        description: для gauge и ответов
+        type: number
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API service for collecting runtime metrics.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: GoMetrics API
+  version: "1.0"
+paths:
+  /:
+    get:
+      description: Returns an HTML page containing all current metrics and their values.
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML content
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      summary: List all metrics
+      tags:
+      - info
+  /ping:
+    get:
+      description: Checks if the database is accessible.
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Database connection error
+          schema:
+            type: string
+      summary: Ping database
+      tags:
+      - info
+  /update/:
+    post:
+      consumes:
+      - application/json
+      description: Updates a single metric provided in JSON format.
+      parameters:
+      - description: Metric object
+        in: body
+        name: metric
+        required: true
+        schema:
+          $ref: '#/definitions/metricsdto.Metrics'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/metricsdto.Metrics'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Update metric (JSON)
+      tags:
+      - update
+  /update/{type}/{name}/{value}:
+    post:
+      description: Updates a metric value via URL path parameters.
+      parameters:
+      - description: Metric type (gauge or counter)
+        in: path
+        name: type
+        required: true
+        type: string
+      - description: Metric name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Metric value
+        in: path
+        name: value
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request or Parse Error
+          schema:
+            type: string
+      summary: Update metric
+      tags:
+      - update
+  /updates/:
+    post:
+      consumes:
+      - application/json
+      - ' application/x-gob'
+      description: Updates metrics in batch. Supports application/json and application/x-gob.
+      parameters:
+      - description: List of metrics to update
+        in: body
+        name: metrics
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/metricsdto.Metrics'
+          type: array
+      produces:
+      - application/json
+      - ' application/x-gob'
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/metricsdto.Metrics'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Update multiple metrics
+      tags:
+      - update
+  /value/:
+    post:
+      consumes:
+      - application/json
+      description: Retrieves a metric value based on ID and MType in JSON body.
+      parameters:
+      - description: Metric request object (ID, MType)
+        in: body
+        name: metric
+        required: true
+        schema:
+          $ref: '#/definitions/metricsdto.Metrics'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/metricsdto.Metrics'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Metric not found
+          schema:
+            type: string
+      summary: Get metric value (JSON)
+      tags:
+      - value
+  /value/{type}/{name}:
+    get:
+      description: Returns the value of a specific metric by type and name.
+      parameters:
+      - description: Metric type (gauge or counter)
+        in: path
+        name: type
+        required: true
+        type: string
+      - description: Metric name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Metric value
+          schema:
+            type: string
+        "400":
+          description: Invalid metric type
+          schema:
+            type: string
+        "404":
+          description: Metric not found
+          schema:
+            type: string
+      summary: Get metric value
+      tags:
+      - value
+swagger: "2.0"
