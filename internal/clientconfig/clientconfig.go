@@ -19,7 +19,7 @@ type ClientConfig struct {
 	// ReportInterval is the frequency (in seconds) of sending metrics to the server.
 	ReportInterval int `env:"REPORT_INTERVAL" envDefault:"10"`
 
-	// PollInterval is the frequency (in seconds) of updating metrics from runtime.
+	// PollInterval is the frequency (in seconds) of updating metrics from runtime app.
 	PollInterval int `env:"POLL_INTERVAL" envDefault:"2"`
 
 	// Addr represents the target server address (host:port).

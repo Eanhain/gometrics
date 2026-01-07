@@ -129,7 +129,7 @@ func main() {
 	newMux.Use(myCompress.GzipHandleWriter) // Response compression
 	newMux.Use(myCompress.GzipHandleReader) // Request decompression
 
-	newMux.Mount("/swagger/*", httpSwagger.WrapHandler)
+	newMux.Mount("/swagger", httpSwagger.WrapHandler)
 
 	// Mount profiler for debugging
 	newMux.Mount("/debug", middleware.Profiler())
