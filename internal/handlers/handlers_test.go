@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -171,4 +172,102 @@ func Test_HandlerService_JsonInsert(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ExampleHandlerService_UpdateMetrics demonstrates how to update a metric via URL path parameters.
+func ExampleHandlerService_UpdateMetrics() {
+	// 1. Setup minimal dependencies
+	memStore := storage.NewMemStorage()
+	svc := service.NewService(memStore, &stubPersistStorage{}) // Stub persistence
+	router := chi.NewMux()
+	handlerService := NewHandlerService(svc, router)
+	handlerService.CreateHandlers()
+
+	// 2. Create a test request
+	// Update gauge 'cpu' with value 0.001
+	req := httptest.NewRequest(http.MethodPost, "/update/gauge/cpu/0.001", nil)
+	w := httptest.NewRecorder()
+
+	// 3. Serve the request
+	router.ServeHTTP(w, req)
+
+	// 4. Check response
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	fmt.Println("Status Code:", resp.StatusCode)
+
+	// Verify the value was actually stored
+	val, _ := svc.GetGauge(context.Background(), "cpu")
+	fmt.Printf("Stored Value: %.3f\n", val)
+
+	// Output:
+	// Status Code: 200
+	// Stored Value: 0.001
+}
+
+// ExampleHandlerService_GetMetrics demonstrates how to retrieve a metric value.
+func ExampleHandlerService_GetMetrics() {
+	// 1. Setup
+	memStore := storage.NewMemStorage()
+	svc := service.NewService(memStore, &stubPersistStorage{})
+	router := chi.NewMux()
+	handlerService := NewHandlerService(svc, router)
+	handlerService.CreateHandlers()
+
+	// Pre-fill a metric
+	_ = svc.CounterInsert(context.Background(), "poll_count", 10)
+
+	// 2. Create request
+	req := httptest.NewRequest(http.MethodGet, "/value/counter/poll_count", nil)
+	w := httptest.NewRecorder()
+
+	// 3. Serve
+	router.ServeHTTP(w, req)
+
+	// 4. Output result
+	resp := w.Result()
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	fmt.Println("Status Code:", resp.StatusCode)
+	fmt.Println("Body:", string(body))
+
+	// Output:
+	// Status Code: 200
+	// Body: 10
+}
+
+// ExampleHandlerService_PostJSON demonstrates updating a metric via JSON body.
+func ExampleHandlerService_PostJSON() {
+	// 1. Setup
+	memStore := storage.NewMemStorage()
+	svc := service.NewService(memStore, &stubPersistStorage{})
+	router := chi.NewMux()
+	handlerService := NewHandlerService(svc, router)
+	handlerService.CreateHandlers()
+
+	// 2. Create JSON request body
+	jsonBody := `{"id":"memory_usage","type":"gauge","value":512.5}`
+	req := httptest.NewRequest(http.MethodPost, "/update/", io.NopCloser(bytes.NewBufferString(jsonBody)))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+
+	// 3. Serve
+	router.ServeHTTP(w, req)
+
+	// 4. Check result
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	// We just check status here, assuming standard output format
+	fmt.Println("Status Code:", resp.StatusCode)
+
+	val, _ := svc.GetGauge(context.Background(), "memory_usage")
+	fmt.Printf("Stored Value: %.1f\n", val)
+
+	// Output:
+	// Status Code: 200
+	// Stored Value: 512.5
 }

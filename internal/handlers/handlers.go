@@ -19,12 +19,12 @@ import (
 
 // HandlerService manages HTTP request handling and routing.
 type HandlerService struct {
-	service ServiceInt
+	service Service
 	router  *chi.Mux
 }
 
-// ServiceInt defines the business logic interface for metrics manipulation.
-type ServiceInt interface {
+// Service defines the business logic interface for metrics manipulation.
+type Service interface {
 	GaugeInsert(ctx context.Context, key string, value float64) error
 	CounterInsert(ctx context.Context, key string, value int) error
 	GetGauge(ctx context.Context, key string) (float64, error)
@@ -35,7 +35,7 @@ type ServiceInt interface {
 }
 
 // NewHandlerService creates a new HandlerService instance.
-func NewHandlerService(service ServiceInt, router *chi.Mux) *HandlerService {
+func NewHandlerService(service Service, router *chi.Mux) *HandlerService {
 	return &HandlerService{
 		service: service,
 		router:  router,

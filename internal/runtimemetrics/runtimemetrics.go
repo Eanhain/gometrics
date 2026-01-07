@@ -34,7 +34,7 @@ import (
 // and communicating with the storage service and external client.
 type RuntimeUpdate struct {
 	mu         sync.RWMutex
-	service    serviceInt
+	service    Service
 	memMetrics runtime.MemStats
 	client     *resty.Client
 	// ChIn is a buffered channel used for batched metric transmission.
@@ -42,8 +42,8 @@ type RuntimeUpdate struct {
 	RateLimit int
 }
 
-// serviceInt defines the interface for interacting with the local metrics storage/service.
-type serviceInt interface {
+// Service defines the interface for interacting with the local metrics storage/service.
+type Service interface {
 	GaugeInsert(ctx context.Context, key string, value float64) error
 	CounterInsert(ctx context.Context, key string, value int) error
 	GetAllMetrics(ctx context.Context) ([]string, []string, map[string]string)
@@ -56,7 +56,7 @@ type serviceInt interface {
 // Arguments:
 //   - service: The local service interface for storing collected metrics before sending.
 //   - RateLimit: The capacity of the internal channel for outgoing metric batches.
-func NewRuntimeUpdater(service serviceInt, RateLimit int) *RuntimeUpdate {
+func NewRuntimeUpdater(service Service, RateLimit int) *RuntimeUpdate {
 	return &RuntimeUpdate{
 		service:    service,
 		memMetrics: runtime.MemStats{},
