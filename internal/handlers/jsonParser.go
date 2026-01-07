@@ -106,7 +106,6 @@ func (h *HandlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 			return
 		}
 		metric.Value = &lVar
-		res.WriteHeader(http.StatusOK)
 	case metricsdto.MetricTypeCounter:
 		lVar, err := h.service.GetCounter(req.Context(), metric.ID)
 		if err != nil {
@@ -115,7 +114,6 @@ func (h *HandlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 		}
 		lVar64 := int64(lVar)
 		metric.Delta = &lVar64
-		res.WriteHeader(http.StatusOK)
 	default:
 		http.Error(res, "invalid action type", http.StatusNotFound)
 		return
