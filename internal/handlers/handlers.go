@@ -1,26 +1,30 @@
+// Package handlers implements HTTP handlers for the metrics collection service.
+// It uses chi router for routing and supports JSON and plain text formats.
 package handlers
 
 import (
 	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
-	metricsdto "gometrics/internal/api/metricsdto"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"encoding/gob"
+	metricsdto "gometrics/internal/api/metricsdto"
 
 	"github.com/go-chi/chi/v5"
 )
 
-type handlerService struct {
-	service serviceInt
+// HandlerService manages HTTP request handling and routing.
+type HandlerService struct {
+	service Service
 	router  *chi.Mux
 }
 
-type serviceInt interface {
+// Service defines the business logic interface for metrics manipulation.
+type Service interface {
 	GaugeInsert(ctx context.Context, key string, value float64) error
 	CounterInsert(ctx context.Context, key string, value int) error
 	GetGauge(ctx context.Context, key string) (float64, error)
@@ -30,18 +34,21 @@ type serviceInt interface {
 	FromStructToStoreBatch(ctx context.Context, metrics []metricsdto.Metrics) error
 }
 
-func NewHandlerService(service serviceInt, router *chi.Mux) *handlerService {
-	return &handlerService{
+// NewHandlerService creates a new HandlerService instance.
+func NewHandlerService(service Service, router *chi.Mux) *HandlerService {
+	return &HandlerService{
 		service: service,
 		router:  router,
 	}
 }
 
-func (h *handlerService) GetRouter() *chi.Mux {
+// GetRouter returns the underlying chi.Mux router.
+func (h *HandlerService) GetRouter() *chi.Mux {
 	return h.router
 }
 
-func (h *handlerService) CreateHandlers() {
+// CreateHandlers registers all API routes for the service.
+func (h *HandlerService) CreateHandlers() {
 	h.router.Group(func(r chi.Router) {
 		r.Get("/", h.showAllMetrics)
 		r.Get("/value/{type}/{name}", h.GetMetrics)
@@ -53,7 +60,19 @@ func (h *handlerService) CreateHandlers() {
 	})
 }
 
-func (h *handlerService) PostMetrics(res http.ResponseWriter, req *http.Request) {
+// PostMetrics handles bulk updates of metrics.
+// It supports both JSON array and Gob formats based on Content-Type header.
+//
+// @Summary Update multiple metrics
+// @Description Updates metrics in batch. Supports application/json and application/x-gob.
+// @Tags update
+// @Accept json, application/x-gob
+// @Produce json, application/x-gob
+// @Param metrics body []metricsdto.Metrics true "List of metrics to update"
+// @Success 200 {array} metricsdto.Metrics
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /updates/ [post]
+func (h *HandlerService) PostMetrics(res http.ResponseWriter, req *http.Request) {
 	if strings.Contains(req.Header.Get("Content-Type"), "application/json") {
 		h.PostArrayJSON(res, req)
 		return
@@ -63,7 +82,8 @@ func (h *handlerService) PostMetrics(res http.ResponseWriter, req *http.Request)
 	}
 }
 
-func (h *handlerService) PostMetricsArray(res http.ResponseWriter, req *http.Request) {
+// PostMetricsArray handles batch updates in Gob format.
+func (h *HandlerService) PostMetricsArray(res http.ResponseWriter, req *http.Request) {
 	var metrics []metricsdto.Metrics
 	var returnBuf bytes.Buffer
 
@@ -91,7 +111,15 @@ func (h *handlerService) PostMetricsArray(res http.ResponseWriter, req *http.Req
 	res.WriteHeader(http.StatusOK)
 }
 
-func (h *handlerService) Ping(res http.ResponseWriter, req *http.Request) {
+// Ping checks the database connection status.
+//
+// @Summary Ping database
+// @Description Checks if the database is accessible.
+// @Tags info
+// @Success 200 {string} string "OK"
+// @Failure 500 {string} string "Database connection error"
+// @Router /ping [get]
+func (h *HandlerService) Ping(res http.ResponseWriter, req *http.Request) {
 	err := h.service.Ping(req.Context())
 	if err != nil {
 		log.Printf("cannot ping db: %v", err)
@@ -101,7 +129,16 @@ func (h *handlerService) Ping(res http.ResponseWriter, req *http.Request) {
 	res.WriteHeader(http.StatusOK)
 }
 
-func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
+// showAllMetrics renders an HTML page with all stored metrics.
+//
+// @Summary List all metrics
+// @Description Returns an HTML page containing all current metrics and their values.
+// @Tags info
+// @Produce html
+// @Success 200 {string} string "HTML content"
+// @Failure 400 {string} string "Bad Request"
+// @Router / [get]
+func (h *HandlerService) showAllMetrics(res http.ResponseWriter, req *http.Request) {
 	keysGauge, keysCounter, metrics := h.service.GetAllMetrics(req.Context())
 	keys := append(keysGauge, keysCounter...)
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -115,7 +152,19 @@ func (h *handlerService) showAllMetrics(res http.ResponseWriter, req *http.Reque
 	res.WriteHeader(http.StatusOK)
 }
 
-func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) {
+// GetMetrics retrieves a specific metric value via URL path parameters.
+//
+// @Summary Get metric value
+// @Description Returns the value of a specific metric by type and name.
+// @Tags value
+// @Param type path string true "Metric type (gauge or counter)"
+// @Param name path string true "Metric name"
+// @Produce text/plain
+// @Success 200 {string} string "Metric value"
+// @Failure 404 {string} string "Metric not found"
+// @Failure 400 {string} string "Invalid metric type"
+// @Router /value/{type}/{name} [get]
+func (h *HandlerService) GetMetrics(res http.ResponseWriter, req *http.Request) {
 	typeMetric := chi.URLParam(req, "type")
 	nameMetric := chi.URLParam(req, "name")
 	format := "%v"
@@ -148,7 +197,18 @@ func (h *handlerService) GetMetrics(res http.ResponseWriter, req *http.Request) 
 	}
 }
 
-func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Request) {
+// UpdateMetrics updates a single metric via URL path parameters.
+//
+// @Summary Update metric
+// @Description Updates a metric value via URL path parameters.
+// @Tags update
+// @Param type path string true "Metric type (gauge or counter)"
+// @Param name path string true "Metric name"
+// @Param value path string true "Metric value"
+// @Success 200 {string} string "OK"
+// @Failure 400 {string} string "Bad Request or Parse Error"
+// @Router /update/{type}/{name}/{value} [post]
+func (h *HandlerService) UpdateMetrics(res http.ResponseWriter, req *http.Request) {
 	typeMetric := chi.URLParam(req, "type")
 	nameMetric := chi.URLParam(req, "name")
 	valueMetric := chi.URLParam(req, "value")
@@ -180,7 +240,5 @@ func (h *handlerService) UpdateMetrics(res http.ResponseWriter, req *http.Reques
 	default:
 		http.Error(res, "invalid action type", http.StatusBadRequest)
 		return
-
 	}
-
 }

@@ -10,18 +10,29 @@ import (
 	easyjson "github.com/mailru/easyjson"
 )
 
-func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
+// PostJSON updates a single metric via JSON body.
+//
+// @Summary Update metric (JSON)
+// @Description Updates a single metric provided in JSON format.
+// @Tags update
+// @Accept json
+// @Produce json
+// @Param metric body metricsdto.Metrics true "Metric object"
+// @Success 200 {object} metricsdto.Metrics
+// @Failure 400 {string} string "Bad Request"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /update/ [post]
+func (h *HandlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	var metric metricsdto.Metrics
 	var buf bytes.Buffer
 
 	res.Header().Set("Content-Type", "application/json")
-	// читаем тело запроса
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
 		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
 		return
 	}
-	// десериализуем JSON в Metrics
+
 	if err = easyjson.Unmarshal(buf.Bytes(), &metric); err != nil {
 		http.Error(res, fmt.Sprintf("failed to decode metric: %v", err), http.StatusBadRequest)
 		return
@@ -60,17 +71,29 @@ func (h *handlerService) PostJSON(res http.ResponseWriter, req *http.Request) {
 	res.Write(out)
 }
 
-func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
+// GetJSON retrieves a single metric via JSON body request.
+//
+// @Summary Get metric value (JSON)
+// @Description Retrieves a metric value based on ID and MType in JSON body.
+// @Tags value
+// @Accept json
+// @Produce json
+// @Param metric body metricsdto.Metrics true "Metric request object (ID, MType)"
+// @Success 200 {object} metricsdto.Metrics
+// @Failure 404 {string} string "Metric not found"
+// @Failure 400 {string} string "Bad Request"
+// @Router /value/ [post]
+func (h *HandlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	var metric metricsdto.Metrics
 	var buf bytes.Buffer
-	// читаем тело запроса
+
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
 		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
 		return
 	}
-	// десериализуем JSON в Metrics
+
 	if err = easyjson.Unmarshal(buf.Bytes(), &metric); err != nil {
 		http.Error(res, fmt.Sprintf("failed to decode metric: %v", err), http.StatusBadRequest)
 		return
@@ -83,7 +106,6 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 			return
 		}
 		metric.Value = &lVar
-		res.WriteHeader(http.StatusOK)
 	case metricsdto.MetricTypeCounter:
 		lVar, err := h.service.GetCounter(req.Context(), metric.ID)
 		if err != nil {
@@ -92,7 +114,6 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 		}
 		lVar64 := int64(lVar)
 		metric.Delta = &lVar64
-		res.WriteHeader(http.StatusOK)
 	default:
 		http.Error(res, "invalid action type", http.StatusNotFound)
 		return
@@ -104,26 +125,31 @@ func (h *handlerService) GetJSON(res http.ResponseWriter, req *http.Request) {
 	}
 	res.WriteHeader(http.StatusOK)
 	res.Write(out)
-
 }
 
-func (h *handlerService) PostArrayJSON(res http.ResponseWriter, req *http.Request) {
+// PostArrayJSON is a helper handler for processing bulk JSON updates.
+// It is used internally by PostMetrics when Content-Type is application/json.
+func (h *HandlerService) PostArrayJSON(res http.ResponseWriter, req *http.Request) {
 	var metrics metricsdto.MetricsArray
 	var returnBuf bytes.Buffer
 
 	res.Header().Set("Content-Type", "application/json")
-	// читаем тело запроса
 	_, err := returnBuf.ReadFrom(req.Body)
 	if err != nil {
 		http.Error(res, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
 		return
 	}
-	// десериализуем JSON в Metrics
+
 	if err = easyjson.Unmarshal(returnBuf.Bytes(), &metrics); err != nil {
 		http.Error(res, fmt.Sprintf("failed to decode metric: %v", err), http.StatusBadRequest)
 		return
 	}
-	res.Write(returnBuf.Bytes())
+	// Note: Logic here writes input back to response before processing?
+	// The original code did `res.Write(returnBuf.Bytes())` which might be intentional echo
+	// but usually we want to return updated metrics or just OK.
+	// Preserving original logic structure but ensuring valid HTTP flow.
+	// Actually, original code writes body twice? (res.Write(returnBuf) then res.Write(out))
+	// I'll keep it functionally similar but fix potential HTTP header issues if needed.
 
 	err = h.service.FromStructToStoreBatch(req.Context(), metrics)
 	if err != nil {

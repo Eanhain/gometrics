@@ -3,11 +3,12 @@ package logger
 import (
 	"bytes"
 	"fmt"
-	"gometrics/internal/compress"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"gometrics/internal/compress"
 
 	"go.uber.org/zap"
 )

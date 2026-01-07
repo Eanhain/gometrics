@@ -1,0 +1,327 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "API service for collecting runtime metrics.",
+        "title": "GoMetrics API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "http://www.swagger.io/support",
+            "email": "support@swagger.io"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/": {
+            "get": {
+                "description": "Returns an HTML page containing all current metrics and their values.",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "info"
+                ],
+                "summary": "List all metrics",
+                "responses": {
+                    "200": {
+                        "description": "HTML content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/ping": {
+            "get": {
+                "description": "Checks if the database is accessible.",
+                "tags": [
+                    "info"
+                ],
+                "summary": "Ping database",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Database connection error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/update/": {
+            "post": {
+                "description": "Updates a single metric provided in JSON format.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "update"
+                ],
+                "summary": "Update metric (JSON)",
+                "parameters": [
+                    {
+                        "description": "Metric object",
+                        "name": "metric",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/metricsdto.Metrics"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/metricsdto.Metrics"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/update/{type}/{name}/{value}": {
+            "post": {
+                "description": "Updates a metric value via URL path parameters.",
+                "tags": [
+                    "update"
+                ],
+                "summary": "Update metric",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Metric type (gauge or counter)",
+                        "name": "type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Metric name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Metric value",
+                        "name": "value",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request or Parse Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/updates/": {
+            "post": {
+                "description": "Updates metrics in batch. Supports application/json and application/x-gob.",
+                "consumes": [
+                    "application/json",
+                    " application/x-gob"
+                ],
+                "produces": [
+                    "application/json",
+                    " application/x-gob"
+                ],
+                "tags": [
+                    "update"
+                ],
+                "summary": "Update multiple metrics",
+                "parameters": [
+                    {
+                        "description": "List of metrics to update",
+                        "name": "metrics",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/metricsdto.Metrics"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/metricsdto.Metrics"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/value/": {
+            "post": {
+                "description": "Retrieves a metric value based on ID and MType in JSON body.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "value"
+                ],
+                "summary": "Get metric value (JSON)",
+                "parameters": [
+                    {
+                        "description": "Metric request object (ID, MType)",
+                        "name": "metric",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/metricsdto.Metrics"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/metricsdto.Metrics"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Metric not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/value/{type}/{name}": {
+            "get": {
+                "description": "Returns the value of a specific metric by type and name.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "value"
+                ],
+                "summary": "Get metric value",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Metric type (gauge or counter)",
+                        "name": "type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Metric name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Metric value",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid metric type",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Metric not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "metricsdto.Metrics": {
+            "type": "object",
+            "properties": {
+                "delta": {
+                    "description": "для counter",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "\"gauge\" | \"counter\"",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "для gauge и ответов",
+                    "type": "number"
+                }
+            }
+        }
+    }
+}

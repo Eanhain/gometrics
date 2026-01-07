@@ -6,10 +6,10 @@
 *.dylib
 
 # Test binary, built with `go test -c`
-*.test
+# *.test
 
 # Output of the go coverage tool, specifically when used with LiteIDE
-*.out
+# *.out
 
 # Binaries
 cmd/agent/main
@@ -31,3 +31,8 @@ cmd/server/metrics_storage
 main
 metricstest
 .DS_Store
+
+
+metricstest_v2-darwin-arm64
+
+metricstest-darwin-arm64
