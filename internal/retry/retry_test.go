@@ -16,15 +16,8 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// Mock функция для тестирования вызовов
-type MockAction struct {
-	mock.Mock
-}
-
-func (m *MockAction) Execute(args ...any) (any, error) {
-	callArgs := m.Called(args...)
-	return callArgs.Get(0), callArgs.Error(1)
-}
+// Ручной MockAction больше не нужен.
+// Мы используем сгенерированный: NewMockAction(t)
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
@@ -35,16 +28,18 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestRetry_SuccessOnFirstTry(t *testing.T) {
 	cfg := DefaultConfig()
-	mockAction := new(MockAction)
+	// Используем конструктор сгенерированного мока
+	mockAction := NewMockAction(t)
 
 	// Ожидаем один вызов, который вернет "success" и nil ошибку
 	mockAction.On("Execute", mock.Anything).Return("success", nil).Once()
 
+	// Передаем метод Execute сгенерированного объекта
 	res, err := cfg.Retry(context.Background(), mockAction.Execute, "arg1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "success", res)
-	mockAction.AssertExpectations(t)
+	// AssertExpectations вызывается автоматически через t.Cleanup() в современных версиях mockery
 }
 
 func TestRetry_SuccessAfterRetries(t *testing.T) {
@@ -54,7 +49,7 @@ func TestRetry_SuccessAfterRetries(t *testing.T) {
 		Delays:      []time.Duration{1 * time.Millisecond, 1 * time.Millisecond},
 		ShouldRetry: func(err error) bool { return true },
 	}
-	mockAction := new(MockAction)
+	mockAction := NewMockAction(t)
 
 	// 1-й вызов: ошибка
 	mockAction.On("Execute", mock.Anything).Return(nil, errors.New("fail 1")).Once()
@@ -67,7 +62,6 @@ func TestRetry_SuccessAfterRetries(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "finally success", res)
-	mockAction.AssertExpectations(t)
 	mockAction.AssertNumberOfCalls(t, "Execute", 3)
 }
 
@@ -77,7 +71,7 @@ func TestRetry_FailAfterAllAttempts(t *testing.T) {
 		Delays:      []time.Duration{1 * time.Millisecond},
 		ShouldRetry: func(err error) bool { return true },
 	}
-	mockAction := new(MockAction)
+	mockAction := NewMockAction(t)
 
 	expectedErr := errors.New("persistent error")
 	mockAction.On("Execute", mock.Anything).Return(nil, expectedErr)
@@ -96,7 +90,7 @@ func TestRetry_ContextCancellation(t *testing.T) {
 		Delays:      []time.Duration{100 * time.Millisecond}, // Долгая задержка
 		ShouldRetry: func(err error) bool { return true },
 	}
-	mockAction := new(MockAction)
+	mockAction := NewMockAction(t)
 	mockAction.On("Execute", mock.Anything).Return(nil, errors.New("err"))
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -123,7 +117,7 @@ func TestRetry_NonRetriableError(t *testing.T) {
 		return err.Error() != "fatal error"
 	}
 
-	mockAction := new(MockAction)
+	mockAction := NewMockAction(t)
 	mockAction.On("Execute", mock.Anything).Return(nil, errors.New("fatal error")).Once()
 
 	_, err := cfg.Retry(context.Background(), mockAction.Execute)
@@ -148,8 +142,7 @@ func TestDelayForAttempt(t *testing.T) {
 	assert.Equal(t, time.Second, emptyCfg.delayForAttempt(0), "Default fallback")
 }
 
-// --- Тесты логики defaultShouldRetry ---
-
+// --- Тесты логики defaultShouldRetry (оставляем без изменений) ---
 func TestDefaultShouldRetry(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -215,7 +208,6 @@ func TestDefaultShouldRetry(t *testing.T) {
 	}
 }
 
-// Дополнительный тест для покрытия net.Error Timeout()
 type timeoutError struct{}
 
 func (e timeoutError) Error() string   { return "timeout" }
@@ -223,7 +215,6 @@ func (e timeoutError) Timeout() bool   { return true }
 func (e timeoutError) Temporary() bool { return true }
 
 func TestDefaultShouldRetry_NetTimeout(t *testing.T) {
-	// Создаем ошибку, реализующую net.Error с Timeout() == true
 	err := timeoutError{}
 	assert.True(t, defaultShouldRetry(err))
 }

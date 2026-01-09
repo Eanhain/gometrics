@@ -8,9 +8,9 @@ import (
 
 func TestBuildVerPrint(t *testing.T) {
 	// Можно временно подменить переменные, если они экспортируемые
-	BuildVersion = "v1.0.0"
-	BuildDate = "2023-01-01"
-	BuildCommit = "abcdef"
+	buildVersion = "v1.0.0"
+	buildDate = "2023-01-01"
+	buildCommit = "abcdef"
 
 	got := BuildVerPrint()
 	assert.Contains(t, got, "Build version: v1.0.0")
