@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"gometrics/configs"
 	"gometrics/internal/clientconfig"
 	"gometrics/internal/persist"
 	"gometrics/internal/retry"
@@ -37,6 +38,7 @@ var extMetrics = []string{
 // --- Main Entry Point ---
 
 func main() {
+	fmt.Println(configs.BuildVerPrint())
 	// 1. Предварительная проверка окружения
 	if err := checkDependencies(); err != nil {
 		panic(err)
