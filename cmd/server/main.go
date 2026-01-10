@@ -125,8 +125,7 @@ func main() {
 	newMux := chi.NewMux()
 
 	newMux.Use(signature.DecryptRSAHandler(f.CryptoKey))
-	newMux.Use(newLogger.WithLogging) // Logging middleware
-
+	newMux.Use(newLogger.WithLogging)       // Logging middleware
 	newMux.Use(myCompress.GzipHandleWriter) // Response compression
 	newMux.Use(myCompress.GzipHandleReader) // Request decompression
 
