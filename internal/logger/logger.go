@@ -71,8 +71,6 @@ func (l *LoggerRequest) WithLogging(h http.Handler) http.Handler {
 		var buf []byte
 		var err error
 
-		buf = bufTMP.Bytes()
-
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			buf, err = compress.Decompress(bufTMP.Bytes())
 			if err != nil {
@@ -80,7 +78,7 @@ func (l *LoggerRequest) WithLogging(h http.Handler) http.Handler {
 			}
 
 		} else {
-
+			buf = bufTMP.Bytes()
 		}
 		duration := time.Since(start)
 		l.Infoln(
