@@ -16,6 +16,7 @@ type ServerConfigs struct {
 	Restore     bool      `env:"RESTORE" envDefault:"true"`
 	DatabaseDSN string    `env:"DATABASE_DSN" envDefault:""`
 	Key         string    `env:"KEY" envDefault:""`
+	CryptoKey   string    `env:"CRYPTO_KEY" envDefault:""`
 }
 
 func (o *ServerConfigs) GetPort() string {
@@ -47,6 +48,7 @@ func (o *ServerConfigs) ParseFlags() {
 	flag.StringVar(&o.FilePath, "f", o.FilePath, "Metrics store file destination")
 	flag.StringVar(&o.DatabaseDSN, "d", o.DatabaseDSN, "DB connection string")
 	flag.StringVar(&o.Key, "k", o.Key, "Cipher key")
+	flag.StringVar(&o.CryptoKey, "crypto-key", o.CryptoKey, "Public key for https")
 	flag.BoolVar(&o.Restore, "r", o.Restore, "Restore metrics from json file")
 	flag.Parse()
 

@@ -33,6 +33,8 @@ type ClientConfig struct {
 
 	// RateLimit controls the number of concurrent workers for sending metrics.
 	RateLimit int `env:"RATE_LIMIT" envDefault:"5"`
+
+	CryptoKey string `env:"CRYPTO_KEY" envDefault:""`
 }
 
 // GetPort returns the port string formatted with a colon (e.g., ":8080").
@@ -83,6 +85,7 @@ func (o *ClientConfig) ParseFlags() {
 		flag.Var(&o.Addr, "a", "Host and port for connect/create")
 		flag.StringVar(&o.Compress, "c", o.Compress, "Send metrics with compression")
 		flag.StringVar(&o.Key, "k", o.Key, "Cipher key")
+		flag.StringVar(&o.CryptoKey, "crypto-key", o.CryptoKey, "Public key for https")
 	}
 
 	// 3. Parse Flags
