@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	"gometrics/internal/compress"
 
 	"go.uber.org/zap"
 )
@@ -66,19 +69,19 @@ func (l *LoggerRequest) WithLogging(h http.Handler) http.Handler {
 		h.ServeHTTP(&lw, r)
 
 		var buf []byte
-		// var err error
+		var err error
 
 		buf = bufTMP.Bytes()
 
-		// if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-		// 	buf, err = compress.Decompress(bufTMP.Bytes())
-		// 	if err != nil {
-		// 		l.Errorw("gzip decompress failed", "err", err)
-		// 	}
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			buf, err = compress.Decompress(bufTMP.Bytes())
+			if err != nil {
+				l.Errorw("gzip decompress failed", "err", err)
+			}
 
-		// } else {
+		} else {
 
-		// }
+		}
 		duration := time.Since(start)
 		l.Infoln(
 			"uri", r.RequestURI,
