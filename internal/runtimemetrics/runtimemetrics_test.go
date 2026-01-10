@@ -40,19 +40,19 @@ func Test_runtimeUpdate_FillRepo(t *testing.T) {
 	}{
 		{
 			name:    "All OK",
-			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1),
+			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1, nil),
 			args:    args{metrics: []string{"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "TotalAlloc"}},
 			wantErr: nil,
 		},
 		{
 			name:    "Wrong key",
-			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1),
+			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1, nil),
 			args:    args{metrics: []string{"NewMetric"}},
 			wantErr: fmt.Errorf("can't find value by this key"),
 		},
 		{
 			name:    "Wrong type",
-			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1),
+			ru:      NewRuntimeUpdater(service.NewService(storage.NewMemStorage(), &stubPersistStorage{}), 1, nil),
 			args:    args{metrics: []string{"BySize"}}, // BySize is an array/slice in MemStats, not scalar
 			wantErr: fmt.Errorf("wrong data type"),
 		},
@@ -75,7 +75,7 @@ func Test_runtimeUpdate_FillRepo(t *testing.T) {
 }
 
 func TestRuntimeUpdate_ParseGauge(t *testing.T) {
-	ru := NewRuntimeUpdater(nil, 1)
+	ru := NewRuntimeUpdater(nil, 1, nil)
 
 	tests := []struct {
 		name    string
@@ -104,7 +104,7 @@ func TestRuntimeUpdate_ParseGauge(t *testing.T) {
 }
 
 func TestRuntimeUpdate_ComputeHash(t *testing.T) {
-	ru := NewRuntimeUpdater(nil, 1)
+	ru := NewRuntimeUpdater(nil, 1, nil)
 	key := "secret"
 	data := []byte("test-data")
 
@@ -123,7 +123,7 @@ func TestRuntimeUpdate_ComputeHash(t *testing.T) {
 }
 
 func TestRuntimeUpdate_ConvertToDTO(t *testing.T) {
-	ru := NewRuntimeUpdater(nil, 1)
+	ru := NewRuntimeUpdater(nil, 1, nil)
 	ctx := context.Background()
 
 	metricMaps := map[string]string{
@@ -154,7 +154,7 @@ func ExampleRuntimeUpdate_GetMetrics() {
 	// Setup service
 	memStore := storage.NewMemStorage()
 	svc := service.NewService(memStore, &stubPersistStorage{})
-	ru := NewRuntimeUpdater(svc, 10)
+	ru := NewRuntimeUpdater(svc, 10, nil)
 
 	ctx := context.Background()
 
@@ -181,7 +181,7 @@ func ExampleRuntimeUpdate_GetMetrics() {
 
 // ExampleRuntimeUpdate_SendBatch demonstrates adding metrics to the send channel.
 func ExampleRuntimeUpdate_SendBatch() {
-	ru := NewRuntimeUpdater(nil, 5)
+	ru := NewRuntimeUpdater(nil, 5, nil)
 
 	metrics := []metricsdto.Metrics{
 		{ID: "test", MType: "gauge"},
@@ -203,7 +203,7 @@ func ExampleRuntimeUpdate_SendBatch() {
 
 func TestRuntimeUpdate_SendBatch_Blocking(t *testing.T) {
 	// Test that channel behavior works as expected
-	ru := NewRuntimeUpdater(nil, 1) // Buffer size 1
+	ru := NewRuntimeUpdater(nil, 1, nil) // Buffer size 1
 
 	metrics := []metricsdto.Metrics{{ID: "m1"}}
 
@@ -219,7 +219,7 @@ func TestRuntimeUpdate_SendBatch_Blocking(t *testing.T) {
 }
 
 func TestRuntimeUpdate_AddGauge_Error(t *testing.T) {
-	ru := NewRuntimeUpdater(nil, 1)
+	ru := NewRuntimeUpdater(nil, 1, nil)
 
 	metricsMap := map[string]string{"g1": "invalid-float"}
 	keys := []string{"g1"}
@@ -229,7 +229,7 @@ func TestRuntimeUpdate_AddGauge_Error(t *testing.T) {
 }
 
 func TestRuntimeUpdate_AddCounter_Error(t *testing.T) {
-	ru := NewRuntimeUpdater(nil, 1)
+	ru := NewRuntimeUpdater(nil, 1, nil)
 
 	metricsMap := map[string]string{"c1": "invalid-int"}
 	keys := []string{"c1"}

@@ -85,7 +85,7 @@ func (o *ClientConfig) ParseFlags() {
 		flag.Var(&o.Addr, "a", "Host and port for connect/create")
 		flag.StringVar(&o.Compress, "c", o.Compress, "Send metrics with compression")
 		flag.StringVar(&o.Key, "k", o.Key, "Cipher key")
-		flag.StringVar(&o.CryptoKey, "crypto-key", o.CryptoKey, "Public key for https")
+		flag.StringVar(&o.CryptoKey, "crypto-key", o.CryptoKey, "Public key for payload encryption")
 	}
 
 	// 3. Parse Flags

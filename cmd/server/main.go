@@ -124,12 +124,16 @@ func main() {
 	// 7. Setup HTTP Router & Middleware
 	newMux := chi.NewMux()
 
+	newMux.Use(signature.DecryptRSAHandler(f.CryptoKey))
+
+	newMux.Use(myCompress.GzipHandleWriter) // Response compression
+	newMux.Use(myCompress.GzipHandleReader) // Request decompression
+
 	newMux.Use(newLogger.WithLogging) // Logging middleware
+
 	if f.Key != "" && f.Key != "none" {
 		newMux.Use(signature.SignatureHandler(f.Key)) // HMAC Signature verification
 	}
-	newMux.Use(myCompress.GzipHandleWriter) // Response compression
-	newMux.Use(myCompress.GzipHandleReader) // Request decompression
 
 	newMux.Mount("/swagger", httpSwagger.WrapHandler)
 

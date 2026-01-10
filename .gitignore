@@ -40,3 +40,4 @@ metricstest-darwin-arm64
 
 *.key
 *.crt
+*.pem

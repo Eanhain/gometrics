@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"log"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"gometrics/internal/retry"
 	"gometrics/internal/runtimemetrics"
 	"gometrics/internal/service"
+	"gometrics/internal/signature"
 	"gometrics/internal/storage"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -49,6 +51,16 @@ func main() {
 	cfg := clientconfig.InitialFlags()
 	cfg.ParseFlags()
 
+	var pubKey *rsa.PublicKey
+
+	if cfg.CryptoKey != "" {
+		var err error
+		pubKey, err = signature.GetRSAPubKey(cfg.CryptoKey)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	// 3. Инициализация контекста и сервисного слоя
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -59,7 +71,7 @@ func main() {
 	}
 
 	// 4. Подготовка каналов и генератора метрик
-	metricsGen := runtimemetrics.NewRuntimeUpdater(svc, cfg.RateLimit)
+	metricsGen := runtimemetrics.NewRuntimeUpdater(svc, cfg.RateLimit, pubKey)
 
 	// Каналы для сигналов от тикеров
 	pollCh1 := make(chan struct{})
