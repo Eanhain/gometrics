@@ -13,6 +13,7 @@ import (
 
 	httpSwagger "github.com/swaggo/http-swagger"
 
+	"gometrics/configs"
 	myCompress "gometrics/internal/compress"
 	"gometrics/internal/db"
 	"gometrics/internal/handlers"
@@ -43,6 +44,7 @@ import (
 // @host            localhost:8080
 // @BasePath        /
 func main() {
+	fmt.Println(configs.BuildVerPrint())
 	// 1. Initialize configuration
 	f := serverconfig.InitialFlags()
 	f.ParseFlags()

@@ -14,6 +14,14 @@ import (
 	"github.com/lib/pq"
 )
 
+// Action — интерфейс для автоматической генерации мока через mockery.
+// Сигнатура совпадает с rFunc func(...any) (any, error).
+//
+//go:generate go run github.com/vektra/mockery/v2@v2.53.5 --name Action --inpackage --case underscore
+type Action interface {
+	Execute(args ...any) (any, error)
+}
+
 type RetryConfig struct {
 	Attempts    int
 	Delays      []time.Duration
