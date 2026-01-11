@@ -127,11 +127,12 @@ func main() {
 	newMux.Use(signature.DecryptRSAHandler(f.CryptoKey))
 	newMux.Use(newLogger.WithLogging)       // Logging middleware
 	newMux.Use(myCompress.GzipHandleWriter) // Response compression
-	newMux.Use(myCompress.GzipHandleReader) // Request decompression
 
 	if f.Key != "" && f.Key != "none" {
 		newMux.Use(signature.SignatureHandler(f.Key)) // HMAC Signature verification
 	}
+
+	newMux.Use(myCompress.GzipHandleReader) // Request decompression
 
 	newMux.Mount("/swagger", httpSwagger.WrapHandler)
 
