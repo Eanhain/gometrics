@@ -23,7 +23,6 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 )
 
-// --- Constants ---
 var metrics = []string{
 	"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle",
 	"HeapInuse", "HeapObjects", "HeapReleased", "HeapSys", "LastGC", "Lookups",
@@ -61,9 +60,8 @@ func main() {
 
 	metricsGen := runtimemetrics.NewRuntimeUpdater(svc, cfg.RateLimit, pubKey)
 
-	// Channels
-	pollCh1 := make(chan struct{})
-	pollCh2 := make(chan struct{})
+	// ИЗМЕНЕНИЕ: Один канал для поллинга, чтобы избежать гонки
+	pollCh := make(chan struct{})
 	reportCh := make(chan struct{})
 	jobs := make(chan func(), cfg.RateLimit)
 
@@ -72,26 +70,22 @@ func main() {
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second
 	targetURL := fmt.Sprintf("http://%v%v/updates/", cfg.GetHost(), cfg.GetPort())
 
-	// Task Factory
 	senderTaskFactory := func() func() {
 		return func() {
 			metricsGen.Sender(ctx, targetURL, cfg)
 		}
 	}
 
-	// 5. Start Background Processes
-	runTickers(ctx, &wg, pollInterval, reportInterval, pollCh1, pollCh2, reportCh)
+	// Запускаем
+	runTickers(ctx, &wg, pollInterval, reportInterval, pollCh, reportCh)
 
-	// ВАЖНО: передаем jobs сюда, так как Dispatcher удален (он был источником бесконечных задач)
-	runCollectors(ctx, &wg, metricsGen, pollCh1, pollCh2, reportCh, jobs, senderTaskFactory)
+	// Передаем один pollCh
+	runCollectors(ctx, &wg, metricsGen, pollCh, reportCh, jobs, senderTaskFactory)
 
 	runWorkerPool(ctx, &wg, cfg.RateLimit, jobs)
 
-	// 6. Wait Shutdown
 	waitShutdown(ctx, cancel, &wg)
 }
-
-// --- Helpers ---
 
 func checkDependencies() error {
 	if _, err := cpu.Percent(0, false); err != nil {
@@ -103,69 +97,41 @@ func checkDependencies() error {
 func initService(ctx context.Context) (*service.Service, error) {
 	retryCfg := retry.DefaultConfig()
 	retryCfg.OnRetry = func(err error, attempt int, delay time.Duration) {
-		log.Printf("agent retry attempt %d failed: %v; next retry in %v", attempt, err, delay)
+		log.Printf("agent retry attempt %d failed: %v", attempt, err)
 	}
 	persistResult, err := retryCfg.Retry(ctx, func(args ...any) (any, error) {
 		return persist.NewPersistStorage(args[0].(string), args[1].(int))
 	}, "agent", -100)
 	if err != nil {
-		return nil, fmt.Errorf("init agent persist storage: %w", err)
+		return nil, fmt.Errorf("init agent persist: %w", err)
 	}
-	agentPersist := persistResult.(*persist.PersistStorage)
-	return service.NewService(storage.NewMemStorage(), agentPersist), nil
+	return service.NewService(storage.NewMemStorage(), persistResult.(*persist.PersistStorage)), nil
 }
 
-// runTickers запускает таймеры и распределяет сигналы по каналам
-func runTickers(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	pollInterval, reportInterval time.Duration,
-	poll1, poll2, report chan<- struct{},
-) {
-	tickerPoll := time.NewTicker(pollInterval)
-	tickerReport := time.NewTicker(reportInterval)
+func runTickers(ctx context.Context, wg *sync.WaitGroup, pollI, reportI time.Duration, poll, report chan<- struct{}) {
+	tPoll := time.NewTicker(pollI)
+	tReport := time.NewTicker(reportI)
 
-	// Fan-out для Poll тикера
+	// Poll Ticker
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer tickerPoll.Stop()
-		defer close(poll1)
-		defer close(poll2)
+		defer tPoll.Stop()
+		defer close(poll)
 
-		// Хелпер для безопасной отправки
 		send := func() {
-			var wgFanOut sync.WaitGroup
-			wgFanOut.Add(2)
-
-			// Отправка в poll1
-			go func() {
-				defer wgFanOut.Done()
-				select {
-				case poll1 <- struct{}{}:
-				case <-ctx.Done():
-				}
-			}()
-
-			// Отправка в poll2
-			go func() {
-				defer wgFanOut.Done()
-				select {
-				case poll2 <- struct{}{}:
-				case <-ctx.Done():
-				}
-			}()
-
-			wgFanOut.Wait()
+			select {
+			case poll <- struct{}{}:
+			case <-ctx.Done():
+			}
 		}
 
-		// 1. МГНОВЕННЫЙ ЗАПУСК ПРИ СТАРТЕ (чтобы тесты не ждали первого тика)
+		// ВАЖНО: Мгновенный первый сбор для тестов
 		send()
 
-		// 2. Цикл по тикеру
 		for {
 			select {
-			case <-tickerPoll.C:
+			case <-tPoll.C:
 				send()
 			case <-ctx.Done():
 				return
@@ -173,29 +139,21 @@ func runTickers(
 		}
 	}()
 
-	// Fan-out для Report тикера
+	// Report Ticker
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer tickerReport.Stop()
+		defer tReport.Stop()
 		defer close(report)
-
-		// Хелпер
-		send := func() {
-			select {
-			case report <- struct{}{}:
-			case <-ctx.Done():
-			}
-		}
-
-		// 1. Не отправляем Report мгновенно, даем шанс накопиться метрикам (Poll)
-		// Или можно отправить, но Poll должен пройти раньше.
-		// Обычно Report лучше ждать по таймеру, но Poll критичен сразу.
 
 		for {
 			select {
-			case <-tickerReport.C:
-				send()
+			case <-tReport.C:
+				select {
+				case report <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
 			case <-ctx.Done():
 				return
 			}
@@ -207,46 +165,39 @@ func runCollectors(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	gen *runtimemetrics.RuntimeUpdate,
-	inExt, inStd, inBatch <-chan struct{},
+	inPoll, inReport <-chan struct{}, // Один канал inPoll
 	jobs chan<- func(),
 	taskFactory func() func(),
 ) {
-	// 1. Ext Metrics
+	// Worker 1: ПОСЛЕДОВАТЕЛЬНЫЙ сбор метрик
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for range inExt {
+		for range inPoll {
 			if ctx.Err() != nil {
 				return
 			}
+
+			// 1. Ext metrics
 			if err := gen.GetMetrics(ctx, extMetrics, true); err != nil {
-				log.Printf("err ext metrics: %v", err)
+				log.Printf("err ext: %v", err)
 			}
-		}
-	}()
-
-	// 2. Std Metrics
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for range inStd {
-			if ctx.Err() != nil {
-				return
-			}
+			// 2. Std metrics (тут обновляется PollCount)
+			// Выполняется строго после Ext, никакой гонки!
 			if err := gen.GetMetrics(ctx, metrics, false); err != nil {
-				log.Printf("err std metrics: %v", err)
+				log.Printf("err std: %v", err)
 			}
 		}
 	}()
 
-	// 3. Batch & Schedule Task
+	// Worker 2: Batch Generator
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer close(jobs) // Closing jobs stops workers
+		defer close(jobs)
 		defer gen.CloseChannel(ctx)
 
-		for range inBatch {
+		for range inReport {
 			if ctx.Err() != nil {
 				return
 			}
@@ -256,7 +207,6 @@ func runCollectors(
 				continue
 			}
 
-			// Schedule Send Task (One per tick, not infinite loop!)
 			select {
 			case jobs <- taskFactory():
 				log.Println("send task scheduled")
@@ -295,7 +245,7 @@ func waitShutdown(ctx context.Context, cancel context.CancelFunc, wg *sync.WaitG
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-stop
-	log.Printf("Signal %v received. Shutdown...", sig)
+	log.Printf("Signal %v. Shutdown...", sig)
 	cancel()
 	wg.Wait()
 	log.Println("Agent stopped.")
