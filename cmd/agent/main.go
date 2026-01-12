@@ -115,55 +115,87 @@ func initService(ctx context.Context) (*service.Service, error) {
 	return service.NewService(storage.NewMemStorage(), agentPersist), nil
 }
 
-func runTickers(ctx context.Context, wg *sync.WaitGroup, pollI, reportI time.Duration, p1, p2, r chan<- struct{}) {
-	tPoll := time.NewTicker(pollI)
-	tReport := time.NewTicker(reportI)
+// runTickers запускает таймеры и распределяет сигналы по каналам
+func runTickers(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	pollInterval, reportInterval time.Duration,
+	poll1, poll2, report chan<- struct{},
+) {
+	tickerPoll := time.NewTicker(pollInterval)
+	tickerReport := time.NewTicker(reportInterval)
 
-	// Poll Ticker
+	// Fan-out для Poll тикера
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer tPoll.Stop()
-		defer close(p1)
-		defer close(p2)
+		defer tickerPoll.Stop()
+		defer close(poll1)
+		defer close(poll2)
 
+		// Хелпер для безопасной отправки
+		send := func() {
+			var wgFanOut sync.WaitGroup
+			wgFanOut.Add(2)
+
+			// Отправка в poll1
+			go func() {
+				defer wgFanOut.Done()
+				select {
+				case poll1 <- struct{}{}:
+				case <-ctx.Done():
+				}
+			}()
+
+			// Отправка в poll2
+			go func() {
+				defer wgFanOut.Done()
+				select {
+				case poll2 <- struct{}{}:
+				case <-ctx.Done():
+				}
+			}()
+
+			wgFanOut.Wait()
+		}
+
+		// 1. МГНОВЕННЫЙ ЗАПУСК ПРИ СТАРТЕ (чтобы тесты не ждали первого тика)
+		send()
+
+		// 2. Цикл по тикеру
 		for {
 			select {
-			case <-tPoll.C:
-				var wgFanOut sync.WaitGroup
-				wgFanOut.Add(2)
-				// Safe send with select
-				send := func(ch chan<- struct{}) {
-					defer wgFanOut.Done()
-					select {
-					case ch <- struct{}{}:
-					case <-ctx.Done():
-					}
-				}
-				go send(p1)
-				go send(p2)
-				wgFanOut.Wait()
+			case <-tickerPoll.C:
+				send()
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
 
-	// Report Ticker
+	// Fan-out для Report тикера
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer tReport.Stop()
-		defer close(r)
+		defer tickerReport.Stop()
+		defer close(report)
+
+		// Хелпер
+		send := func() {
+			select {
+			case report <- struct{}{}:
+			case <-ctx.Done():
+			}
+		}
+
+		// 1. Не отправляем Report мгновенно, даем шанс накопиться метрикам (Poll)
+		// Или можно отправить, но Poll должен пройти раньше.
+		// Обычно Report лучше ждать по таймеру, но Poll критичен сразу.
 
 		for {
 			select {
-			case <-tReport.C:
-				select {
-				case r <- struct{}{}:
-				case <-ctx.Done():
-					return
-				}
+			case <-tickerReport.C:
+				send()
 			case <-ctx.Done():
 				return
 			}
