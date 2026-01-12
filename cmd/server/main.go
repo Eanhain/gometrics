@@ -35,18 +35,15 @@ import (
 func main() {
 	fmt.Println(configs.BuildVerPrint())
 
-	// 1. Config
 	f := serverconfig.InitialFlags()
 	f.ParseFlags()
 
-	// 2. Logger
 	newLogger, err := logger.CreateLoggerRequest()
 	if err != nil {
 		panic(fmt.Errorf("init request logger: %w", err))
 	}
 	defer newLogger.Sync()
 
-	// 3. Context & Retry
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -62,7 +59,7 @@ func main() {
 		dbStore *db.DBStorage
 	)
 
-	// DB
+	// DB Connection
 	if f.DatabaseDSN != "" {
 		newLogger.Infoln("attempting DB connection", f.DatabaseDSN)
 		dbResult, connErr := retryCfg.Retry(ctx, func(args ...any) (any, error) {
@@ -75,12 +72,12 @@ func main() {
 		if dbResult != nil {
 			dbStore, _ = dbResult.(*db.DBStorage)
 			if dbStore != nil {
-				f.StoreInter = 0 // Disable file flush if DB is used
+				f.StoreInter = 0
 			}
 		}
 	}
 
-	// File (Fallback)
+	// File Storage
 	if dbStore == nil {
 		persistResult, persistErr := retryCfg.Retry(ctx, func(args ...any) (any, error) {
 			return persist.NewPersistStorage(args[0].(string), args[1].(int))
@@ -100,15 +97,30 @@ func main() {
 		newService = service.NewService(newStorage, pstore)
 	}
 
-	// 6. Router
+	// 6. Router & Middleware
 	newMux := chi.NewMux()
+
+	// --- ИСПРАВЛЕННЫЙ ПОРЯДОК MIDDLEWARE ---
+
+	// 1. Сначала расшифровка (если есть RSA)
 	newMux.Use(signature.DecryptRSAHandler(f.CryptoKey))
+
+	// 2. Логирование (видит сырой запрос, это ок)
 	newMux.Use(newLogger.WithLogging)
+
+	// 3. ВАЖНО: Сначала разжимаем запрос (Gzip Reader), чтобы дальше работать с JSON
+	newMux.Use(myCompress.GzipHandleReader)
+
+	// 4. Подготавливаем Writer для сжатия ответа
 	newMux.Use(myCompress.GzipHandleWriter)
+
+	// 5. Проверяем подпись (теперь она проверяет чистый JSON, а не GZIP)
 	if f.Key != "" && f.Key != "none" {
 		newMux.Use(signature.SignatureHandler(f.Key))
 	}
-	newMux.Use(myCompress.GzipHandleReader)
+
+	// --- КОНЕЦ ИСПРАВЛЕНИЙ ---
+
 	newMux.Mount("/swagger", httpSwagger.WrapHandler)
 	newMux.Mount("/debug", middleware.Profiler())
 
@@ -123,7 +135,7 @@ func main() {
 		}
 	}
 
-	// 8. Server Setup
+	// 8. Server Start
 	if f.StoreInter < 0 {
 		panic(fmt.Errorf("STORE_INTERVAL must be >= 0"))
 	}
@@ -135,7 +147,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// --- Task A: File Flush Loop (Optional) ---
+	// Task A: Flush Loop
 	if f.StoreInter > 0 && dbStore == nil {
 		wg.Add(1)
 		go func() {
@@ -157,7 +169,7 @@ func main() {
 		}()
 	}
 
-	// --- Task B: HTTP Server ---
+	// Task B: HTTP Server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -168,7 +180,7 @@ func main() {
 		}
 	}()
 
-	// --- Graceful Shutdown ---
+	// Graceful Shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -179,18 +191,15 @@ func main() {
 		newLogger.Info("Context cancelled")
 	}
 
-	// 1. Stop HTTP
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		newLogger.Errorf("Shutdown error: %v", err)
 	}
 
-	// 2. Stop Background Tasks
 	cancel()
 	wg.Wait()
 
-	// 3. Final Flush & Close
 	if f.StoreInter > 0 && dbStore == nil {
 		newLogger.Info("Final flush...")
 		flushCtx, flushCancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -200,7 +209,6 @@ func main() {
 		}
 	}
 
-	newLogger.Info("Closing storage...")
 	if err := newService.StorageCloser(); err != nil {
 		newLogger.Errorf("Storage close error: %v", err)
 	}
