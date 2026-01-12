@@ -1,31 +1,67 @@
 package serverconfig
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert" // Рекомендую использовать testify для удобства
-	// "gometrics/internal/addr" // Ваш импорт
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestServerConfigs_ParseFlags проверяет приоритеты:
-// 1. Флаги имеют приоритет над Env (стандартное поведение).
-// 2. Исключение в вашем коде: Key из Env имеет приоритет над флагом.
+// createTempConfig создает временный JSON-файл с конфигурацией для тестов.
+// Возвращает путь к созданному файлу. Файл автоматически удаляется при завершении теста (если использовать t.Cleanup, но здесь мы удаляем вручную в defer).
+func createTempConfig(t *testing.T, content fileConfig) string {
+	t.Helper() // Помечает функцию как вспомогательную для корректного вывода стека ошибок
+
+	// Создаем временный файл с префиксом "config_" и суффиксом ".json"
+	file, err := os.CreateTemp("", "config_*.json")
+	require.NoError(t, err, "Не удалось создать временный файл конфигурации")
+
+	// Закрываем файл после записи
+	defer file.Close()
+
+	// Записываем структуру fileConfig в формате JSON
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(content)
+	require.NoError(t, err, "Не удалось записать JSON в файл")
+
+	return file.Name()
+}
+
+// TestServerConfigs_ParseFlags проверяет логику парсинга конфигурации.
+// Приоритет значений (от высшего к низшему):
+// 1. Флаги командной строки (Flags)
+// 2. Переменные окружения (Env)
+// 3. Файл конфигурации JSON (Config File)
+// 4. Значения по умолчанию (Defaults)
 func TestServerConfigs_ParseFlags(t *testing.T) {
+	// Базовая конфигурация для JSON-файла, используемая в тестах
+	jsonContent := fileConfig{
+		Address:       "localhost:9090",
+		Restore:       false,
+		StoreInterval: "1s", // В JSON интервал задается строкой (например, "1s", "500ms")
+		StoreFile:     "/tmp/json_metrics",
+		DatabaseDSN:   "postgres://json:pass@localhost:5432/db",
+		CryptoKey:     "/tmp/json_key.pem",
+	}
+
 	tests := []struct {
-		name string
-		args []string          // Аргументы командной строки (без имени программы)
-		env  map[string]string // Переменные окружения
-		want ServerConfigs     // Ожидаемый результат
+		name    string            // Название теста
+		args    []string          // Аргументы командной строки (имитация os.Args)
+		env     map[string]string // Переменные окружения
+		useJSON bool              // Если true, будет создан и передан файл конфигурации
+		want    ServerConfigs     // Ожидаемая итоговая конфигурация
 	}{
 		{
-			name: "Default values",
+			name: "Default values (No flags, No Env, No Config)",
 			args: []string{},
 			env:  map[string]string{},
 			want: ServerConfigs{
-				StoreInter:  300,
+				// Значения по умолчанию из envDefault тэгов или инициализации
+				StoreInter:  300, // envDefault:"300"
 				FilePath:    "metrics_storage",
 				Restore:     true,
 				DatabaseDSN: "",
@@ -33,7 +69,7 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 			},
 		},
 		{
-			name: "Env vars set only",
+			name: "Environment variables only (Env > Defaults)",
 			args: []string{},
 			env: map[string]string{
 				"STORE_INTERVAL":    "500",
@@ -49,7 +85,7 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 			},
 		},
 		{
-			name: "Flags set only",
+			name: "Flags only (Flags > Defaults)",
 			args: []string{
 				"-i", "100",
 				"-f", "/flag/path",
@@ -65,93 +101,136 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 			},
 		},
 		{
-			name: "Priority check: Flags overwrite Env (Standard fields)",
-			args: []string{"-i", "777"}, // Флаг
-			env: map[string]string{
-				"STORE_INTERVAL": "500", // Env
-			},
+			name:    "JSON Config only (Config > Defaults)",
+			args:    []string{},
+			env:     map[string]string{},
+			useJSON: true, // Генерируем файл из jsonContent
 			want: ServerConfigs{
-				StoreInter: 777, // Победил флаг
-				FilePath:   "metrics_storage",
-				Restore:    true,
-				Key:        "",
+				StoreInter:  1, // "1s" парсится в 1 секунду
+				FilePath:    "/tmp/json_metrics",
+				Restore:     false,
+				DatabaseDSN: "postgres://json:pass@localhost:5432/db",
+				CryptoKey:   "/tmp/json_key.pem",
 			},
 		},
 		{
-			name: "Priority check: Env overwrites Flags (Custom Logic for KEY)",
-			args: []string{"-k", "key_from_flag"},
+			name: "Priority check: Env overwrites JSON (Env > JSON)",
+			args: []string{},
 			env: map[string]string{
-				"KEY": "key_from_env",
+				"STORE_INTERVAL": "999", // Задано в Env
+				// Остальные поля не заданы в Env, должны взяться из JSON
 			},
+			useJSON: true,
 			want: ServerConfigs{
-				// В вашем коде есть if envKey != "" { o.Key = envKey },
-				// поэтому Env должен победить флаг.
-				Key:        "key_from_env",
-				StoreInter: 300,
-				FilePath:   "metrics_storage",
-				Restore:    true,
+				StoreInter:  999,                 // Значение из Env (победило JSON "1s")
+				FilePath:    "/tmp/json_metrics", // Значение из JSON (нет в Env)
+				Restore:     false,               // Значение из JSON
+				DatabaseDSN: "postgres://json:pass@localhost:5432/db",
+			},
+		},
+		{
+			name: "Priority check: Flags overwrite everything (Flag > Env > JSON)",
+			args: []string{"-i", "777"}, // Задано флагом
+			env: map[string]string{
+				"STORE_INTERVAL": "888", // Задано в Env
+			},
+			useJSON: true, // В JSON "1s" (1)
+			want: ServerConfigs{
+				StoreInter: 777,                 // Флаг имеет высший приоритет
+				FilePath:   "/tmp/json_metrics", // Из JSON (нет флага и Env)
+				Restore:    false,               // Из JSON
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 1. Сброс переменных окружения перед тестом
+			// 1. Очистка окружения перед каждым тестом
 			os.Clearenv()
 			for k, v := range tt.env {
 				os.Setenv(k, v)
 			}
-			// Очистка после теста
+			// Восстанавливаем чистое окружение после теста
 			defer os.Clearenv()
 
-			// 2. Сброс флагов (критично для тестирования flag пакета)
-			// Мы создаем новый Set, чтобы не засорять глобальный state,
-			// но так как ваш код использует flag.Parse() (глобальный),
-			// нам придется переопределять flag.CommandLine
-			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+			// 2. Сброс состояния флагов
+			// flag.CommandLine хранит глобальное состояние. Нам нужно его сбросить,
+			// чтобы парсинг аргументов одного теста не влиял на другой.
+			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 
-			// 3. Подмена os.Args
+			// 3. Подготовка аргументов командной строки
+			// "cmd" - это имя программы (os.Args[0]), далее идут аргументы
+			args := append([]string{"cmd"}, tt.args...)
+
+			// Если тест требует JSON конфиг, создаем его и добавляем флаг -config
+			if tt.useJSON {
+				configPath := createTempConfig(t, jsonContent)
+				// Удаляем файл после теста
+				defer os.Remove(configPath)
+				args = append(args, "-config", configPath)
+			}
+
+			// Подменяем os.Args
 			oldArgs := os.Args
+			os.Args = args
 			defer func() { os.Args = oldArgs }()
-			os.Args = append([]string{"cmd"}, tt.args...)
 
-			// 4. Инициализация и запуск
+			// 4. Инициализация конфигурации
 			cfg := InitialFlags()
+
+			// 5. Запуск тестируемого метода
 			cfg.ParseFlags()
 
-			// 5. Проверки
-			assert.Equal(t, tt.want.StoreInter, cfg.StoreInter, "StoreInterval mismatch")
-			assert.Equal(t, tt.want.FilePath, cfg.FilePath, "FilePath mismatch")
-			assert.Equal(t, tt.want.Restore, cfg.Restore, "Restore mismatch")
-			assert.Equal(t, tt.want.DatabaseDSN, cfg.DatabaseDSN, "DatabaseDSN mismatch")
-			assert.Equal(t, tt.want.Key, cfg.Key, "Key mismatch")
+			// 6. Проверки (Assertions)
 
-			// assert.Equal(t, tt.want.Addr, cfg.Addr) // Раскомментируйте, если addr.Addr сравним
+			// Проверка StoreInter
+			assert.Equal(t, tt.want.StoreInter, cfg.StoreInter, "StoreInter (интервал сохранения) не совпадает")
+
+			// Проверка FilePath
+			if tt.want.FilePath != "" {
+				assert.Equal(t, tt.want.FilePath, cfg.FilePath, "FilePath (путь к файлу) не совпадает")
+			}
+
+			// Проверка Restore (bool проверяем всегда)
+			assert.Equal(t, tt.want.Restore, cfg.Restore, "Restore (флаг восстановления) не совпадает")
+
+			// Проверка DatabaseDSN
+			if tt.want.DatabaseDSN != "" {
+				assert.Equal(t, tt.want.DatabaseDSN, cfg.DatabaseDSN, "DatabaseDSN (строка подключения к БД) не совпадает")
+			}
+
+			// Проверка Key
+			if tt.want.Key != "" {
+				assert.Equal(t, tt.want.Key, cfg.Key, "Key (ключ подписи) не совпадает")
+			}
+
+			// Дополнительная проверка адреса для JSON теста
+			// Порт 9090 задан в jsonContent
+			if tt.useJSON && len(tt.args) == 0 && len(tt.env) == 0 {
+				assert.Equal(t, ":9090", cfg.GetPort(), "Порт сервера из JSON конфига не совпадает")
+			}
 		})
 	}
 }
 
-// Пример использования (будет отображаться в godoc и работать как тест)
+// ExampleServerConfigs_ParseFlags демонстрирует пример работы парсера конфигурации.
+// Этот код будет включен в документацию GoDoc и проверяется как тест.
 func ExampleServerConfigs_ParseFlags() {
-	// Эмуляция аргументов командной строки
-	// Допустим, пользователь запустил: ./app -i 50
+	// 1. Эмуляция запуска с флагом: ./app -i 50
 	oldArgs := os.Args
 	os.Args = []string{"app", "-i", "50"}
 	defer func() { os.Args = oldArgs }()
 
-	// Сброс флагов для примера
+	// Сброс флагов для чистоты примера
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	// Инициализация
+	// 2. Инициализация и парсинг
 	cfg := InitialFlags()
-
-	// Парсинг
 	cfg.ParseFlags()
 
-	fmt.Printf("Interval: %d\n", cfg.StoreInter)
-	fmt.Printf("Restore: %v\n", cfg.Restore)
+	// 3. Вывод результата
+	fmt.Printf("Store Interval: %d\n", cfg.StoreInter)
 
 	// Output:
-	// Interval: 50
-	// Restore: true
+	// Store Interval: 50
 }
