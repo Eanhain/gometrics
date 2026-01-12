@@ -41,13 +41,10 @@ var extMetrics = []string{
 
 func main() {
 	fmt.Println(configs.BuildVerPrint())
-	// 1. Предварительная проверка окружения
 	if err := checkDependencies(); err != nil {
 		panic(err)
 	}
 
-	// 2. Инициализация конфигурации
-	// Используем ваш пакет clientconfig
 	cfg := clientconfig.InitialFlags()
 	cfg.ParseFlags()
 
@@ -61,7 +58,6 @@ func main() {
 		}
 	}
 
-	// 3. Инициализация контекста и сервисного слоя
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -70,43 +66,41 @@ func main() {
 		panic(err)
 	}
 
-	// 4. Подготовка каналов и генератора метрик
 	metricsGen := runtimemetrics.NewRuntimeUpdater(svc, cfg.RateLimit, pubKey)
 
 	// Каналы для сигналов от тикеров
 	pollCh1 := make(chan struct{})
 	pollCh2 := make(chan struct{})
 	reportCh := make(chan struct{})
+	senderCh := make(chan struct{}) // ← НОВЫЙ канал для sender
 
 	// Канал задач для воркеров
 	jobs := make(chan func(), cfg.RateLimit)
 
 	var wg sync.WaitGroup
 
-	// Подготовка интервалов и URL
 	pollInterval := time.Duration(cfg.PollInterval) * time.Second
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second
 	targetURL := fmt.Sprintf("http://%v%v/updates/", cfg.GetHost(), cfg.GetPort())
 
 	// 5. Запуск фоновых процессов
 
-	// Тикеры (отвечают за тайминг)
-	runTickers(ctx, &wg, pollInterval, reportInterval, pollCh1, pollCh2, reportCh)
+	// Тикеры - передаём senderCh
+	runTickers(ctx, &wg, pollInterval, reportInterval, pollCh1, pollCh2, reportCh, senderCh)
 
-	// Сборщики метрик (реагируют на тики сбора)
+	// Сборщики метрик
 	runCollectors(ctx, &wg, metricsGen, pollCh1, pollCh2, reportCh)
 
-	// Пул воркеров (обрабатывает очередь jobs)
+	// Пул воркеров
 	runWorkerPool(ctx, &wg, cfg.RateLimit, jobs)
 
-	// Диспетчер задач (создает job для отправки по тику reportCh)
-	// Замыкание захватывает cfg и targetURL
+	// Диспетчер задач - передаём senderCh как trigger
 	senderTaskFactory := func() func() {
 		return func() {
 			metricsGen.Sender(ctx, targetURL, cfg)
 		}
 	}
-	runJobDispatcher(ctx, &wg, jobs, senderTaskFactory)
+	runJobDispatcher(ctx, &wg, jobs, senderTaskFactory, senderCh)
 
 	// 6. Ожидание завершения
 	waitShutdown(ctx, cancel, &wg)
@@ -127,7 +121,6 @@ func initService(ctx context.Context) (*service.Service, error) {
 		log.Printf("agent retry attempt %d failed: %v; next retry in %v", attempt, err, delay)
 	}
 
-	// Инициализация "заглушки" персистентности (как в исходном коде)
 	persistResult, err := retryCfg.Retry(ctx, func(args ...any) (any, error) {
 		path := args[0].(string)
 		interval := args[1].(int)
@@ -149,12 +142,12 @@ func runTickers(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	pollInterval, reportInterval time.Duration,
-	poll1, poll2, report chan<- struct{},
+	poll1, poll2, report, sender chan<- struct{}, // ← добавили sender
 ) {
 	tickerPoll := time.NewTicker(pollInterval)
 	tickerReport := time.NewTicker(reportInterval)
 
-	// Fan-out для Poll тикера (раздает сигнал в два канала)
+	// Fan-out для Poll тикера
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -177,17 +170,22 @@ func runTickers(
 		}
 	}()
 
-	// Fan-out для Report тикера
+	// Fan-out для Report тикера - отправляем в report И sender
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer tickerReport.Stop()
 		defer close(report)
+		defer close(sender) // ← закрываем sender
 
 		for {
 			select {
 			case <-tickerReport.C:
-				report <- struct{}{}
+				var wgFanOut sync.WaitGroup
+				wgFanOut.Add(2)
+				go func() { defer wgFanOut.Done(); report <- struct{}{} }()
+				go func() { defer wgFanOut.Done(); sender <- struct{}{} }() // ← отправляем в sender
+				wgFanOut.Wait()
 			case <-ctx.Done():
 				log.Println("ticker report fanout closed")
 				return
@@ -287,12 +285,13 @@ func workerPayload(ctx context.Context, id int, jobs <-chan func()) {
 	}
 }
 
-// runJobDispatcher создает задачи на отправку и кладет их в канал jobs
+// runJobDispatcher создает задачи на отправку по сигналу trigger
 func runJobDispatcher(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	jobs chan<- func(),
 	taskFactory func() func(),
+	trigger <-chan struct{},
 ) {
 	wg.Add(1)
 	go func() {
@@ -304,9 +303,15 @@ func runJobDispatcher(
 			case <-ctx.Done():
 				log.Println("jobs sender closed")
 				return
-			// Создаем задачу и пытаемся положить в канал
-			case jobs <- taskFactory():
-				// Задача успешно добавлена в очередь
+			case _, ok := <-trigger:
+				if !ok {
+					return
+				}
+				select {
+				case jobs <- taskFactory():
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()
@@ -318,7 +323,7 @@ func waitShutdown(ctx context.Context, cancel context.CancelFunc, wg *sync.WaitG
 
 	<-stop
 	log.Println("Graceful shutdown is initialized")
-	cancel() // Отменяем контекст, это сигнал всем горутинам на выход
+	cancel()
 
 	wg.Wait()
 	log.Println("Application stopped")
