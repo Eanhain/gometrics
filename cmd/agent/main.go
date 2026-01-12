@@ -23,8 +23,6 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 )
 
-// --- Constants ---
-
 var metrics = []string{
 	"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle",
 	"HeapInuse", "HeapObjects", "HeapReleased", "HeapSys", "LastGC", "Lookups",
@@ -37,8 +35,6 @@ var extMetrics = []string{
 	"TotalMemory", "FreeMemory", "CPUutilization1",
 }
 
-// --- Main Entry Point ---
-
 func main() {
 	fmt.Println(configs.BuildVerPrint())
 	if err := checkDependencies(); err != nil {
@@ -49,7 +45,6 @@ func main() {
 	cfg.ParseFlags()
 
 	var pubKey *rsa.PublicKey
-
 	if cfg.CryptoKey != "" {
 		var err error
 		pubKey, err = signature.GetRSAPubKey(cfg.CryptoKey)
@@ -68,14 +63,9 @@ func main() {
 
 	metricsGen := runtimemetrics.NewRuntimeUpdater(svc, cfg.RateLimit, pubKey)
 
-	// Каналы для сигналов от тикеров
 	pollCh1 := make(chan struct{})
 	pollCh2 := make(chan struct{})
 	reportCh := make(chan struct{})
-	senderCh := make(chan struct{}) // ← НОВЫЙ канал для sender
-
-	// Канал задач для воркеров
-	jobs := make(chan func(), cfg.RateLimit)
 
 	var wg sync.WaitGroup
 
@@ -83,30 +73,23 @@ func main() {
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second
 	targetURL := fmt.Sprintf("http://%v%v/updates/", cfg.GetHost(), cfg.GetPort())
 
-	// 5. Запуск фоновых процессов
-
-	// Тикеры - передаём senderCh
-	runTickers(ctx, &wg, pollInterval, reportInterval, pollCh1, pollCh2, reportCh, senderCh)
-
-	// Сборщики метрик
+	runTickers(ctx, &wg, pollInterval, reportInterval, pollCh1, pollCh2, reportCh)
 	runCollectors(ctx, &wg, metricsGen, pollCh1, pollCh2, reportCh)
 
-	// Пул воркеров
-	runWorkerPool(ctx, &wg, cfg.RateLimit, jobs)
-
-	// Диспетчер задач - передаём senderCh как trigger
-	senderTaskFactory := func() func() {
-		return func() {
-			metricsGen.Sender(ctx, targetURL, cfg)
-		}
+	for i := 0; i < cfg.RateLimit; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			log.Printf("sender worker %d started", id)
+			if err := metricsGen.SendMetricGobCh(ctx, targetURL, cfg.Compress, cfg.Key); err != nil {
+				log.Printf("sender worker %d error: %v", id, err)
+			}
+			log.Printf("sender worker %d stopped", id)
+		}(i)
 	}
-	runJobDispatcher(ctx, &wg, jobs, senderTaskFactory, senderCh)
 
-	// 6. Ожидание завершения
 	waitShutdown(ctx, cancel, &wg)
 }
-
-// --- Initialization Helpers ---
 
 func checkDependencies() error {
 	if _, err := cpu.Percent(0, false); err != nil {
@@ -135,19 +118,15 @@ func initService(ctx context.Context) (*service.Service, error) {
 	return service.NewService(storage.NewMemStorage(), agentPersist), nil
 }
 
-// --- Concurrency Helpers ---
-
-// runTickers запускает таймеры и распределяет сигналы по каналам
 func runTickers(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	pollInterval, reportInterval time.Duration,
-	poll1, poll2, report, sender chan<- struct{}, // ← добавили sender
+	poll1, poll2, report chan<- struct{},
 ) {
 	tickerPoll := time.NewTicker(pollInterval)
 	tickerReport := time.NewTicker(reportInterval)
 
-	// Fan-out для Poll тикера
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -170,22 +149,16 @@ func runTickers(
 		}
 	}()
 
-	// Fan-out для Report тикера - отправляем в report И sender
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer tickerReport.Stop()
 		defer close(report)
-		defer close(sender) // ← закрываем sender
 
 		for {
 			select {
 			case <-tickerReport.C:
-				var wgFanOut sync.WaitGroup
-				wgFanOut.Add(2)
-				go func() { defer wgFanOut.Done(); report <- struct{}{} }()
-				go func() { defer wgFanOut.Done(); sender <- struct{}{} }() // ← отправляем в sender
-				wgFanOut.Wait()
+				report <- struct{}{}
 			case <-ctx.Done():
 				log.Println("ticker report fanout closed")
 				return
@@ -194,14 +167,12 @@ func runTickers(
 	}()
 }
 
-// runCollectors слушает каналы сигналов и запускает сбор метрик
 func runCollectors(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	metricsGen *runtimemetrics.RuntimeUpdate,
 	inExt, inStd, inBatch <-chan struct{},
 ) {
-	// Worker 1: Сбор расширенных метрик (gopsutil)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -217,7 +188,6 @@ func runCollectors(
 		log.Println("Graceful shutdown common metric sender")
 	}()
 
-	// Worker 2: Сбор стандартных метрик Go
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -233,7 +203,6 @@ func runCollectors(
 		log.Println("Graceful shutdown ext metric sender")
 	}()
 
-	// Worker 3: Генерация батчей для отправки
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -248,72 +217,6 @@ func runCollectors(
 			log.Println("generate done")
 		}
 		log.Println("Graceful shutdown metric generator")
-	}()
-}
-
-// runWorkerPool запускает фиксированное количество воркеров
-func runWorkerPool(ctx context.Context, wg *sync.WaitGroup, limit int, jobs <-chan func()) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var wgWorkers sync.WaitGroup
-
-		for i := 0; i < limit; i++ {
-			wgWorkers.Add(1)
-			go func(id int) {
-				defer wgWorkers.Done()
-				workerPayload(ctx, id, jobs)
-			}(i)
-		}
-		wgWorkers.Wait()
-		log.Println("all workers closed")
-	}()
-}
-
-func workerPayload(ctx context.Context, id int, jobs <-chan func()) {
-	log.Printf("worker %d started", id)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case job, ok := <-jobs:
-			if !ok {
-				return
-			}
-			job()
-		}
-	}
-}
-
-// runJobDispatcher создает задачи на отправку по сигналу trigger
-func runJobDispatcher(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	jobs chan<- func(),
-	taskFactory func() func(),
-	trigger <-chan struct{},
-) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer close(jobs)
-
-		for {
-			select {
-			case <-ctx.Done():
-				log.Println("jobs sender closed")
-				return
-			case _, ok := <-trigger:
-				if !ok {
-					return
-				}
-				select {
-				case jobs <- taskFactory():
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
 	}()
 }
 
