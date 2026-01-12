@@ -35,10 +35,9 @@ import (
 // It holds the state required for buffering metrics, handling rate limits,
 // and communicating with the storage service and external client.
 type RuntimeUpdate struct {
-	mu         sync.RWMutex
-	service    Service
-	memMetrics runtime.MemStats
-	client     *resty.Client
+	mu      sync.RWMutex
+	service Service
+	client  *resty.Client
 	// ChIn is a buffered channel used for batched metric transmission.
 	ChIn      chan []metricsdto.Metrics
 	RateLimit int
@@ -61,12 +60,11 @@ type Service interface {
 //   - RateLimit: The capacity of the internal channel for outgoing metric batches.
 func NewRuntimeUpdater(service Service, RateLimit int, pubKey *rsa.PublicKey) *RuntimeUpdate {
 	return &RuntimeUpdate{
-		service:    service,
-		memMetrics: runtime.MemStats{},
-		client:     resty.New(),
-		ChIn:       make(chan []metricsdto.Metrics, RateLimit),
-		RateLimit:  RateLimit,
-		PubKey:     pubKey,
+		service:   service,
+		client:    resty.New(),
+		ChIn:      make(chan []metricsdto.Metrics, RateLimit),
+		RateLimit: RateLimit,
+		PubKey:    pubKey,
 	}
 }
 
@@ -122,9 +120,11 @@ func (ru *RuntimeUpdate) ParseGauge(rawValue reflect.Value) (float64, error) {
 // FillRepo collects standard Go runtime statistics (MemStats) and saves them to the local service.
 // It iterates over the provided 'metrics' names and extracts corresponding fields from runtime.MemStats using reflection.
 func (ru *RuntimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
-	runtime.ReadMemStats(&ru.memMetrics)
+	var memStats runtime.MemStats   // ← Локальная переменная
+	runtime.ReadMemStats(&memStats) // ← Безопасно
+
 	metricsGauge := make(map[string]float64, len(metrics))
-	v := reflect.ValueOf(ru.memMetrics)
+	v := reflect.ValueOf(memStats) // ← Читаем локальную
 
 	for _, metricName := range metrics {
 		metricValue := v.FieldByName(metricName)
@@ -138,15 +138,14 @@ func (ru *RuntimeUpdate) FillRepo(ctx context.Context, metrics []string) error {
 		metricsGauge[metricName] = value
 	}
 
+	// Лок только для записи в service
 	ru.mu.Lock()
 	defer ru.mu.Unlock()
 	for key, value := range metricsGauge {
-		err := ru.service.GaugeInsert(ctx, key, value)
-		if err != nil {
+		if err := ru.service.GaugeInsert(ctx, key, value); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
