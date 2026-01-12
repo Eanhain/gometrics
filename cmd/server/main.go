@@ -4,11 +4,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	_ "gometrics/swagger"
 	"net/http"
 	_ "net/http/pprof" // Import pprof for profiling
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -32,38 +36,42 @@ import (
 // @title           GoMetrics API
 // @version         1.0
 // @description     API service for collecting runtime metrics.
-// @termsOfService  http://swagger.io/terms/
+// @termsOfService  [http://swagger.io/terms/](http://swagger.io/terms/)
 
 // @contact.name    API Support
-// @contact.url     http://www.swagger.io/support
-// @contact.email   support@swagger.io
+// @contact.url     [http://www.swagger.io/support](http://www.swagger.io/support)
+// @contact.email   [support@swagger.io](mailto:support@swagger.io)
 
 // @license.name    Apache 2.0
-// @license.url     http://www.apache.org/licenses/LICENSE-2.0.html
+// @license.url     [http://www.apache.org/licenses/LICENSE-2.0.html](http://www.apache.org/licenses/LICENSE-2.0.html)
 
 // @host            localhost:8080
 // @BasePath        /
 func main() {
 	fmt.Println(configs.BuildVerPrint())
+
 	// 1. Initialize configuration
 	f := serverconfig.InitialFlags()
 	f.ParseFlags()
-
-	ctx := context.Background()
 
 	// 2. Initialize Logger
 	newLogger, err := logger.CreateLoggerRequest()
 	if err != nil {
 		panic(fmt.Errorf("init request logger: %w", err))
 	}
+	defer newLogger.Sync()
 
-	// 3. Configure Retry Logic (for DB/File storage connections)
+	// 3. Context for Graceful Shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 4. Configure Retry Logic (for DB/File storage connections)
 	retryCfg := retry.DefaultConfig()
 	retryCfg.OnRetry = func(err error, attempt int, delay time.Duration) {
 		newLogger.Warnf("retry attempt %d failed: %v; next retry in %v", attempt, err, delay)
 	}
 
-	// 4. Initialize In-Memory Storage (Primary Storage)
+	// 5. Initialize In-Memory Storage (Primary Storage)
 	newStorage := storage.NewMemStorage()
 
 	var (
@@ -71,7 +79,7 @@ func main() {
 		dbStore *db.DBStorage
 	)
 
-	// 5. Initialize Persistent Storage (Database or File)
+	// 6. Initialize Persistent Storage (Database or File)
 	// Priority: Database > File > None
 	if f.DatabaseDSN != "" {
 		newLogger.Infoln("attempting DB connection", f.DatabaseDSN)
@@ -88,8 +96,7 @@ func main() {
 		}
 		if dbResult != nil {
 			dbStore, _ = dbResult.(*db.DBStorage)
-			// If DB is active, disable file flush interval (storeInter = 0 usually means sync write,
-			// but logic here implies "don't use file flush loop")
+			// If DB is active, disable file flush interval
 			if dbStore != nil {
 				f.StoreInter = 0
 			}
@@ -111,17 +118,15 @@ func main() {
 		pstore = persistResult.(*persist.PersistStorage)
 	}
 
-	// 6. Initialize Business Logic Service
+	// 7. Initialize Business Logic Service
 	var newService *service.Service
 	if dbStore != nil {
 		newService = service.NewService(newStorage, dbStore)
 	} else {
 		newService = service.NewService(newStorage, pstore)
 	}
-	// Ensure storage is closed gracefully on exit
-	defer newService.StorageCloser()
 
-	// 7. Setup HTTP Router & Middleware
+	// 8. Setup HTTP Router & Middleware
 	newMux := chi.NewMux()
 
 	newMux.Use(signature.DecryptRSAHandler(f.CryptoKey))
@@ -139,55 +144,118 @@ func main() {
 	// Mount profiler for debugging
 	newMux.Mount("/debug", middleware.Profiler())
 
-	// 8. Initialize Handlers
+	// 9. Initialize Handlers
 	newHandler := handlers.NewHandlerService(newService, newMux)
+	newHandler.CreateHandlers()
+	r := newHandler.GetRouter()
 
-	// 9. Restore Metrics from persistent storage if enabled
+	// 10. Restore Metrics from persistent storage if enabled
 	if f.Restore {
 		if err := newService.PersistRestore(ctx); err != nil {
 			newLogger.Warnln("restore persisted metrics: ", err)
 		}
 	}
 
-	// 10. Start Server and Background Tasks
-	if f.StoreInter > 0 {
-		// Asynchronous flushing mode
-		var wg sync.WaitGroup
-		wg.Add(2)
-
-		// Task A: Periodic Flush Loop
-		go func() {
-			defer wg.Done()
-			if err := newService.LoopFlush(); err != nil {
-				panic(fmt.Errorf("run flush loop: %w", err))
-			}
-		}()
-
-		// Task B: HTTP Server
-		go func() {
-			defer wg.Done()
-			defer newLogger.Sync() // Flush logs
-
-			newHandler.CreateHandlers()
-			r := newHandler.GetRouter()
-
-			newLogger.Infoln("Starting server on", f.GetAddr())
-			if err := http.ListenAndServe(f.GetAddr(), r); err != nil {
-				panic(fmt.Errorf("listen and serve on %s: %w", f.GetAddr(), err))
-			}
-		}()
-		wg.Wait()
-
-	} else if f.StoreInter == 0 {
-		// Synchronous mode (or DB mode)
-		newHandler.CreateHandlers()
-		r := newHandler.GetRouter()
-
-		newLogger.Infoln("Starting server on", f.GetAddr())
-		if err := http.ListenAndServe(f.GetAddr(), r); err != nil {
-			panic(fmt.Errorf("listen and serve on %s: %w", f.GetAddr(), err))
-		}
-	} else {
-		panic(fmt.Errorf("please, set STORE_INTERVAL >= 0"))
+	// 11. Validate StoreInter configuration
+	if f.StoreInter < 0 {
+		panic(fmt.Errorf("STORE_INTERVAL must be >= 0, got %d", f.StoreInter))
 	}
+
+	// 12. Start Server and Background Tasks
+	srv := &http.Server{
+		Addr:    f.GetAddr(),
+		Handler: r,
+	}
+
+	var wg sync.WaitGroup
+
+	// --- Task A: Periodic Flush Loop (File Storage Only) ---
+	if f.StoreInter > 0 && dbStore == nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			newLogger.Infof("Starting background flush loop with interval %d sec", f.StoreInter)
+
+			ticker := time.NewTicker(time.Duration(f.StoreInter) * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ctx.Done():
+					newLogger.Info("Flush loop stopped by context cancellation")
+					return
+				case <-ticker.C:
+					if err := newService.PersistFlush(ctx); err != nil {
+						newLogger.Errorf("Periodic flush error: %v", err)
+					} else {
+						newLogger.Debug("Metrics flushed to disk")
+					}
+				}
+			}
+		}()
+	}
+
+	// --- Task B: HTTP Server ---
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		newLogger.Infoln("Starting HTTP server on", f.GetAddr())
+
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			newLogger.Errorf("HTTP server error: %v", err)
+			cancel() // Trigger emergency shutdown
+		}
+	}()
+
+	// --- Task C: Wait for Shutdown Signal ---
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	select {
+	case sig := <-quit:
+		newLogger.Infof("Received signal %v, initiating graceful shutdown...", sig)
+	case <-ctx.Done():
+		newLogger.Info("Context cancelled, shutting down...")
+	}
+
+	// --- Shutdown Sequence ---
+
+	// Step 1: Stop accepting new HTTP connections
+	newLogger.Info("Shutting down HTTP server...")
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		newLogger.Errorf("HTTP server shutdown error: %v", err)
+	} else {
+		newLogger.Info("HTTP server stopped gracefully")
+	}
+
+	// Step 2: Cancel context to stop background tasks (flush loop)
+	cancel()
+
+	// Step 3: Wait for all goroutines to finish
+	newLogger.Info("Waiting for background tasks to complete...")
+	wg.Wait()
+
+	// Step 4: Final flush to ensure no data loss
+	newLogger.Info("Performing final flush to persistent storage...")
+	if f.StoreInter > 0 && dbStore == nil {
+		flushCtx, flushCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer flushCancel()
+
+		if err := newService.PersistFlush(flushCtx); err != nil {
+			newLogger.Errorf("Final flush error: %v", err)
+		} else {
+			newLogger.Info("Final flush completed successfully")
+		}
+	}
+
+	// Step 5: Close storage connections
+	newLogger.Info("Closing storage connections...")
+	if err := newService.StorageCloser(); err != nil {
+		newLogger.Errorf("Storage close error: %v", err)
+	}
+
+	newLogger.Info("Server exited successfully")
 }

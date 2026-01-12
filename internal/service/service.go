@@ -221,3 +221,20 @@ func (s *Service) LoopFlush() error {
 		time.Sleep(sendTimeDuration * time.Second)
 	}
 }
+
+// PersistFlush принудительно сохраняет метрики из памяти в pstore.
+// Используется в main.go для периодического сброса и при остановке сервера.
+func (s *Service) PersistFlush(ctx context.Context) error {
+	if s.pstore == nil {
+		return nil
+	}
+	// Берем копии карт из storage (блокировка только на время копирования)
+	gauges := s.GetAllGauges(ctx)
+	counters := s.GetAllCounters(ctx)
+
+	// Пишем в файл
+	if err := s.pstore.FormattingLogs(ctx, gauges, counters); err != nil {
+		return fmt.Errorf("persist flush error: %w", err)
+	}
+	return nil
+}
