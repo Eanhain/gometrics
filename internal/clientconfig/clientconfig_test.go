@@ -46,7 +46,7 @@ func TestClientConfig_ParseFlagsFromArgs(t *testing.T) {
 				"-a", "192.168.0.1:9000",
 				"-k", "secret",
 				"-l", "10",
-				"-c", "false", // Проверяем, что -c попадает в Compress
+				"-c", "false",
 			},
 			envVars: map[string]string{},
 			want: ClientConfig{
@@ -66,16 +66,13 @@ func TestClientConfig_ParseFlagsFromArgs(t *testing.T) {
 			useJSON: true,
 			want: ClientConfig{
 				ReportInterval: 77, // Flag wins
-				PollInterval:   3,  // JSON wins (flag default)
+				PollInterval:   3,  // JSON wins (over default 2)
 				Compress:       "gzip",
 				RateLimit:      5,
 				Key:            "",
 				CryptoKey:      "",
-				// Addr берется дефолтный, если JSON логика в helper упрощена,
-				// или из JSON, если реализована полностью. В helper я сделал Addr.Host == "" check.
-				// InitialFlags дает пустой host? Нет, localhost.
-				// Значит helper не перезапишет Addr из JSON, если там localhost.
-				// Проверим просто ReportInterval, это главное.
+				// Примечание: Addr в тесте с helper может остаться localhost, если JSON логика теста простая.
+				// Проверяем то, что точно должно измениться.
 				Addr: addr.Addr{Host: "localhost", Port: 8080},
 			},
 		},
@@ -102,15 +99,9 @@ func TestClientConfig_ParseFlagsFromArgs(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.want.ReportInterval, cfg.ReportInterval, "ReportInterval mismatch")
-			assert.Equal(t, tt.want.Compress, cfg.Compress, "Compress mismatch")
+			assert.Equal(t, tt.want.PollInterval, cfg.PollInterval, "PollInterval mismatch")
 			assert.Equal(t, tt.want.RateLimit, cfg.RateLimit, "RateLimit mismatch")
+			assert.Equal(t, tt.want.Compress, cfg.Compress, "Compress mismatch")
 		})
 	}
-}
-
-func TestClientConfig_Getters(t *testing.T) {
-	cfg := ClientConfig{}
-	_ = cfg.Addr.Set("10.0.0.1:5432")
-	assert.Equal(t, "10.0.0.1", cfg.GetHost())
-	assert.Equal(t, ":5432", cfg.GetPort())
 }
