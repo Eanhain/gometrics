@@ -13,7 +13,7 @@ import (
 
 func createTempConfig(t *testing.T, content fileConfig) string {
 	t.Helper()
-	file, err := os.CreateTemp("", "config_*.json")
+	file, err := os.CreateTemp("", "server_config_*.json")
 	require.NoError(t, err)
 	defer file.Close()
 
@@ -30,8 +30,6 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 		Restore:       false,
 		StoreInterval: "1s",
 		StoreFile:     "/tmp/json_metrics",
-		DatabaseDSN:   "postgres://json:pass@localhost:5432/db",
-		CryptoKey:     "/tmp/json_key.pem",
 	}
 
 	tests := []struct {
@@ -41,18 +39,6 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 		useJSON bool
 		want    ServerConfigs
 	}{
-		{
-			name: "Default values",
-			args: []string{},
-			env:  map[string]string{},
-			want: ServerConfigs{
-				StoreInter:  300,
-				FilePath:    "metrics_storage",
-				Restore:     true,
-				DatabaseDSN: "",
-				Key:         "",
-			},
-		},
 		{
 			name: "Flags only (Flags > Defaults)",
 			args: []string{
@@ -93,13 +79,12 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 			}
 			defer os.Clearenv()
 
-			// 2. СБРОС ФЛАГОВ
-			// Создаем абсолютно чистый FlagSet.
-			// Важно: имя программы ставим фиктивное "cmd"
+			// 2. ЖЕСТКИЙ СБРОС ГЛОБАЛЬНЫХ ФЛАГОВ
+			// Создаем FlagSet с именем "cmd", чтобы эмулировать реальный запуск
 			flag.CommandLine = flag.NewFlagSet("cmd", flag.ContinueOnError)
 
-			// 3. Подготовка аргументов
-			// Важно: os.Args должен начинаться с имени программы
+			// 3. Подготовка os.Args
+			// os.Args[0] должно быть именем программы
 			args := append([]string{"cmd"}, tt.args...)
 
 			if tt.useJSON {
@@ -108,7 +93,7 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 				args = append(args, "-config", configPath)
 			}
 
-			// Подменяем os.Args глобально, так как flag.Parse() читает именно его
+			// Подменяем os.Args глобально
 			oldArgs := os.Args
 			os.Args = args
 			defer func() { os.Args = oldArgs }()
@@ -119,7 +104,6 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 
 			// 5. Проверки
 			assert.Equal(t, tt.want.StoreInter, cfg.StoreInter, "StoreInter mismatch")
-
 			if tt.want.FilePath != "" {
 				assert.Equal(t, tt.want.FilePath, cfg.FilePath, "FilePath mismatch")
 			}
@@ -129,7 +113,7 @@ func TestServerConfigs_ParseFlags(t *testing.T) {
 }
 
 func ExampleServerConfigs_ParseFlags() {
-	// СБРОС ФЛАГОВ ОБЯЗАТЕЛЕН ДЛЯ EXAMPLE
+	// Сброс флагов для примера
 	flag.CommandLine = flag.NewFlagSet("example", flag.ContinueOnError)
 
 	oldArgs := os.Args

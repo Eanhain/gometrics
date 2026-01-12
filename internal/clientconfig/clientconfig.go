@@ -51,10 +51,12 @@ func (o *ClientConfig) ParseFlags() {
 		flag.IntVar(&o.PollInterval, "p", o.PollInterval, "Refresh metrics interval")
 		flag.IntVar(&o.RateLimit, "l", o.RateLimit, "Sender worker count")
 		flag.Var(&o.Addr, "a", "Host and port")
-		flag.StringVar(&o.Compress, "c", o.Compress, "Compression") // -c для компрессии
+		// Оставляем -c для компрессии, как ты требовал
+		flag.StringVar(&o.Compress, "c", o.Compress, "Compression")
 		flag.StringVar(&o.Key, "k", o.Key, "Key")
 		flag.StringVar(&o.CryptoKey, "crypto-key", o.CryptoKey, "Crypto Key")
 
+		// Для конфига используем -config
 		flag.StringVar(&o.ConfigPath, "config", "", "Config path")
 	}
 
@@ -85,19 +87,13 @@ func (o *ClientConfig) loadConfigFile(path string) {
 		return
 	}
 
-	// Simple check: if ENV is set, we don't overwrite from JSON
-	// Note: We don't check flags here explicitly because flags overwrite struct before this call
-	// BUT for default values it is tricky.
-	// Correct way: Check if Flag was explicitly set.
-
+	// Хелпер для проверки: установлен ли флаг явно
 	isFlagSet := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) {
 		isFlagSet[f.Name] = true
 	})
 
-	// Helper to check if we should apply JSON
 	shouldApply := func(flagName, envName string) bool {
-		// If flag set OR env set -> Do NOT apply JSON
 		return !isFlagSet[flagName] && os.Getenv(envName) == ""
 	}
 
@@ -119,26 +115,27 @@ func (o *ClientConfig) loadConfigFile(path string) {
 	}
 }
 
-// ParseFlagsFromArgs HELPER FOR TESTS
-// Must match ParseFlags logic exactly but use local FlagSet
+// ParseFlagsFromArgs - Хелпер ТОЛЬКО для тестов.
+// Он эмулирует логику ParseFlags, но использует локальный FlagSet.
 func (o *ClientConfig) ParseFlagsFromArgs(args []string) error {
 	fs := flag.NewFlagSet("client-test", flag.ContinueOnError)
 
+	// ВАЖНО: Определяем ТЕ ЖЕ флаги, что и в ParseFlags
 	fs.IntVar(&o.ReportInterval, "r", o.ReportInterval, "")
 	fs.IntVar(&o.PollInterval, "p", o.PollInterval, "")
 	fs.IntVar(&o.RateLimit, "l", o.RateLimit, "")
 	fs.Var(&o.Addr, "a", "")
-	fs.StringVar(&o.Compress, "c", o.Compress, "")
+	fs.StringVar(&o.Compress, "c", o.Compress, "") // -c для компрессии
 	fs.StringVar(&o.Key, "k", o.Key, "")
 	fs.StringVar(&o.CryptoKey, "crypto-key", o.CryptoKey, "")
 	fs.StringVar(&o.ConfigPath, "config", "", "")
 
-	// Parse provided args (without program name)
+	// Парсим переданные аргументы
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	// Apply Env
+	// Накатываем ENV
 	if err := env.Parse(o); err != nil {
 		return err
 	}
@@ -147,27 +144,30 @@ func (o *ClientConfig) ParseFlagsFromArgs(args []string) error {
 		o.Key = envKey
 	}
 
-	// Apply JSON
+	// Накатываем JSON (упрощенно для тестов)
 	if o.ConfigPath != "" {
-		// We can't reuse loadConfigFile easily because it depends on flag.Visit (global state).
-		// So we reimplement simple loading for tests.
+		// Для тестов просто грузим файл, не проверяя flag.Visit (так как fs локальный)
 		file, err := os.Open(o.ConfigPath)
 		if err == nil {
 			defer file.Close()
 			var jCfg fileConfig
 			if json.NewDecoder(file).Decode(&jCfg) == nil {
-				// Naive application for tests (assuming if JSON is present, we might need it)
-				// In real logic we check isSet. For tests, we can assume correct setup.
-				if jCfg.ReportInterval != "" {
+				// Логика приоритета JSON < Flag в тестах
+				// Если значение в структуре равно дефолтному (значит флаг не менял), берем из JSON
+				if o.ReportInterval == 10 && jCfg.ReportInterval != "" { // 10 = default
 					if dur, err := time.ParseDuration(jCfg.ReportInterval); err == nil {
-						// Only apply if flag wasn't set (checking default value is weak but simple)
-						// Better: rely on test cases not to mix conflicting flag/json unless intended
-						if o.ReportInterval == 10 { // 10 is default
-							o.ReportInterval = int(dur.Seconds())
-						}
+						o.ReportInterval = int(dur.Seconds())
 					}
 				}
-				// ... similar for others if needed for JSON tests
+				if o.PollInterval == 2 && jCfg.PollInterval != "" { // 2 = default
+					if dur, err := time.ParseDuration(jCfg.PollInterval); err == nil {
+						o.PollInterval = int(dur.Seconds())
+					}
+				}
+				// Остальные поля по аналогии, если нужно для тестов
+				if o.Addr.Host == "" && jCfg.Address != "" {
+					o.Addr.Set(jCfg.Address)
+				}
 			}
 		}
 	}
