@@ -4,11 +4,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	_ "gometrics/swagger"
 	"net/http"
 	_ "net/http/pprof" // Import pprof for profiling
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -24,6 +27,7 @@ import (
 	"gometrics/internal/service"
 	"gometrics/internal/signature"
 	"gometrics/internal/storage"
+	_ "gometrics/swagger"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -32,24 +36,29 @@ import (
 // @title           GoMetrics API
 // @version         1.0
 // @description     API service for collecting runtime metrics.
-// @termsOfService  http://swagger.io/terms/
+// @termsOfService  [http://swagger.io/terms/](http://swagger.io/terms/)
 
 // @contact.name    API Support
-// @contact.url     http://www.swagger.io/support
-// @contact.email   support@swagger.io
+// @contact.url     [http://www.swagger.io/support](http://www.swagger.io/support)
+// @contact.email   [support@swagger.io](mailto:support@swagger.io)
 
 // @license.name    Apache 2.0
-// @license.url     http://www.apache.org/licenses/LICENSE-2.0.html
+// @license.url     [http://www.apache.org/licenses/LICENSE-2.0.html](http://www.apache.org/licenses/LICENSE-2.0.html)
 
 // @host            localhost:8080
 // @BasePath        /
+
+// shutdownTimeout определяет максимальное время ожидания graceful shutdown
+const shutdownTimeout = 10 * time.Second
+
 func main() {
 	fmt.Println(configs.BuildVerPrint())
 	// 1. Initialize configuration
 	f := serverconfig.InitialFlags()
 	f.ParseFlags()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// 2. Initialize Logger
 	newLogger, err := logger.CreateLoggerRequest()
@@ -118,8 +127,6 @@ func main() {
 	} else {
 		newService = service.NewService(newStorage, pstore)
 	}
-	// Ensure storage is closed gracefully on exit
-	defer newService.StorageCloser()
 
 	// 7. Setup HTTP Router & Middleware
 	newMux := chi.NewMux()
@@ -149,44 +156,118 @@ func main() {
 		}
 	}
 
-	// 10. Start Server and Background Tasks
+	// 10. Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+
+	// 11. Start Server and Background Tasks
 	if f.StoreInter > 0 {
 		// Asynchronous flushing mode
 		var wg sync.WaitGroup
-		wg.Add(2)
+
+		// Создаём контекст для управления flush loop
+		flushCtx, flushCancel := context.WithCancel(ctx)
 
 		// Task A: Periodic Flush Loop
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := newService.LoopFlush(); err != nil {
-				panic(fmt.Errorf("run flush loop: %w", err))
+			if err := newService.LoopFlushWithContext(flushCtx); err != nil {
+				// Игнорируем ошибку отмены контекста
+				if !errors.Is(err, context.Canceled) {
+					newLogger.Errorln("flush loop error:", err)
+				}
 			}
 		}()
 
 		// Task B: HTTP Server
+		newHandler.CreateHandlers()
+		r := newHandler.GetRouter()
+
+		server := &http.Server{
+			Addr:    f.GetAddr(),
+			Handler: r,
+		}
+
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer newLogger.Sync() // Flush logs
-
-			newHandler.CreateHandlers()
-			r := newHandler.GetRouter()
-
 			newLogger.Infoln("Starting server on", f.GetAddr())
-			if err := http.ListenAndServe(f.GetAddr(), r); err != nil {
-				panic(fmt.Errorf("listen and serve on %s: %w", f.GetAddr(), err))
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				newLogger.Errorln("listen and serve error:", err)
 			}
 		}()
+
+		// Ожидаем сигнал завершения
+		sig := <-sigChan
+		newLogger.Infof("Received signal %v, initiating graceful shutdown...", sig)
+
+		// Останавливаем flush loop
+		flushCancel()
+
+		// Graceful shutdown HTTP сервера
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer shutdownCancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			newLogger.Errorln("server shutdown error:", err)
+		}
+
+		// Ждём завершения всех горутин
 		wg.Wait()
+
+		// Финальный flush данных перед закрытием
+		newLogger.Infoln("Flushing remaining data...")
+		if err := newService.PersistFlush(context.Background()); err != nil {
+			newLogger.Errorln("final flush error:", err)
+		}
+
+		// Закрываем хранилище
+		newService.StorageCloser()
+		newLogger.Sync()
+		newLogger.Infoln("Server stopped gracefully")
 
 	} else if f.StoreInter == 0 {
 		// Synchronous mode (or DB mode)
 		newHandler.CreateHandlers()
 		r := newHandler.GetRouter()
 
-		newLogger.Infoln("Starting server on", f.GetAddr())
-		if err := http.ListenAndServe(f.GetAddr(), r); err != nil {
-			panic(fmt.Errorf("listen and serve on %s: %w", f.GetAddr(), err))
+		server := &http.Server{
+			Addr:    f.GetAddr(),
+			Handler: r,
 		}
+
+		// Запускаем сервер в горутине
+		go func() {
+			newLogger.Infoln("Starting server on", f.GetAddr())
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				newLogger.Errorln("listen and serve error:", err)
+			}
+		}()
+
+		// Ожидаем сигнал завершения
+		sig := <-sigChan
+		newLogger.Infof("Received signal %v, initiating graceful shutdown...", sig)
+
+		// Graceful shutdown HTTP сервера
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer shutdownCancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			newLogger.Errorln("server shutdown error:", err)
+		}
+
+		// Финальный flush данных (для DB режима - сохраняем всё что в памяти)
+		newLogger.Infoln("Flushing remaining data...")
+		if err := newService.PersistFlush(context.Background()); err != nil {
+			newLogger.Errorln("final flush error:", err)
+		}
+
+		// Закрываем хранилище
+		newService.StorageCloser()
+		newLogger.Sync()
+		newLogger.Infoln("Server stopped gracefully")
+
 	} else {
 		panic(fmt.Errorf("please, set STORE_INTERVAL >= 0"))
 	}

@@ -25,6 +25,9 @@ import (
 
 // --- Constants ---
 
+// shutdownTimeout определяет максимальное время ожидания graceful shutdown
+const shutdownTimeout = 10 * time.Second
+
 var metrics = []string{
 	"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle",
 	"HeapInuse", "HeapObjects", "HeapReleased", "HeapSys", "LastGC", "Lookups",
@@ -108,8 +111,8 @@ func main() {
 	}
 	runJobDispatcher(ctx, &wg, jobs, senderTaskFactory)
 
-	// 6. Ожидание завершения
-	waitShutdown(ctx, cancel, &wg)
+	// 6. Ожидание завершения с финальной отправкой метрик
+	waitShutdown(ctx, cancel, &wg, metricsGen, targetURL, cfg)
 }
 
 // --- Initialization Helpers ---
@@ -312,14 +315,78 @@ func runJobDispatcher(
 	}()
 }
 
-func waitShutdown(ctx context.Context, cancel context.CancelFunc, wg *sync.WaitGroup) {
+// waitShutdown ожидает сигнал завершения и выполняет graceful shutdown.
+// Перед завершением отправляет все накопленные метрики на сервер.
+func waitShutdown(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	wg *sync.WaitGroup,
+	metricsGen *runtimemetrics.RuntimeUpdate,
+	targetURL string,
+	cfg clientconfig.ClientConfig,
+) {
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	<-stop
-	log.Println("Graceful shutdown is initialized")
-	cancel() // Отменяем контекст, это сигнал всем горутинам на выход
+	sig := <-stop
+	log.Printf("Received signal %v, initiating graceful shutdown...", sig)
 
-	wg.Wait()
-	log.Println("Application stopped")
+	// Отменяем контекст, это сигнал всем горутинам на выход
+	cancel()
+
+	// Создаём контекст с таймаутом для graceful shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
+
+	// Ожидаем завершения всех горутин с таймаутом
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Println("All goroutines stopped gracefully")
+	case <-shutdownCtx.Done():
+		log.Println("Shutdown timeout exceeded, forcing exit")
+	}
+
+	// Финальная отправка накопленных метрик на сервер
+	log.Println("Sending remaining metrics to server...")
+	if err := sendFinalMetrics(shutdownCtx, metricsGen, targetURL, cfg); err != nil {
+		log.Printf("Failed to send final metrics: %v", err)
+	} else {
+		log.Println("Final metrics sent successfully")
+	}
+
+	log.Println("Agent stopped")
+}
+
+// sendFinalMetrics отправляет все накопленные метрики перед завершением агента.
+// Собирает текущие метрики и отправляет их на сервер.
+func sendFinalMetrics(
+	ctx context.Context,
+	metricsGen *runtimemetrics.RuntimeUpdate,
+	targetURL string,
+	cfg clientconfig.ClientConfig,
+) error {
+	// Собираем финальные метрики
+	if err := metricsGen.GetMetrics(ctx, metrics, false); err != nil {
+		log.Printf("Warning: failed to collect final std metrics: %v", err)
+	}
+
+	if err := metricsGen.GetMetrics(ctx, extMetrics, true); err != nil {
+		log.Printf("Warning: failed to collect final ext metrics: %v", err)
+	}
+
+	// Генерируем финальный батч
+	if err := metricsGen.GetMetricsBatch(ctx); err != nil {
+		log.Printf("Warning: failed to generate final batch: %v", err)
+	}
+
+	// Отправляем все накопленные метрики
+	metricsGen.Sender(ctx, targetURL, cfg)
+
+	return nil
 }
