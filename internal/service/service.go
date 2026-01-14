@@ -163,6 +163,36 @@ func (s *Service) PersistRestore(ctx context.Context) error {
 	return nil
 }
 
+// PersistFlush сбрасывает все текущие метрики из памяти в persistent storage.
+// Используется для финального сохранения данных при graceful shutdown.
+func (s *Service) PersistFlush(ctx context.Context) error {
+	if s.pstore == nil {
+		return nil
+	}
+
+	// Проверяем доступность хранилища
+	if err := s.pstore.Ping(ctx); err != nil {
+		// Если ping не прошёл, пробуем просто сделать flush
+		// (для file storage ping может не работать)
+		return s.pstore.Flush()
+	}
+
+	// Сохраняем все метрики
+	gauges := s.GetAllGauges(ctx)
+	counters := s.GetAllCounters(ctx)
+
+	if err := s.pstore.FormattingLogs(ctx, gauges, counters); err != nil {
+		return fmt.Errorf("persist flush formatting: %w", err)
+	}
+
+	// Вызываем flush для записи на диск
+	if err := s.pstore.Flush(); err != nil {
+		return fmt.Errorf("persist flush: %w", err)
+	}
+
+	return nil
+}
+
 // FromStructToStore updates the storage with a single metric DTO.
 // Handles both Gauge and Counter types.
 func (s *Service) FromStructToStore(ctx context.Context, metric metricsdto.Metrics) error {
@@ -202,6 +232,9 @@ func (s *Service) FromStructToStoreBatch(ctx context.Context, metrics []metricsd
 
 // StorageCloser closes the persistent storage connection.
 func (s *Service) StorageCloser() error {
+	if s.pstore == nil {
+		return nil
+	}
 	if err := s.pstore.Close(); err != nil {
 		return fmt.Errorf("close persist storage: %w", err)
 	}
@@ -211,13 +244,31 @@ func (s *Service) StorageCloser() error {
 // LoopFlush starts an infinite loop to periodically flush metrics to persistent storage.
 // The interval is determined by pstore.GetLoopTime().
 // This is a blocking call and should typically be run in a goroutine.
+// Для graceful shutdown используйте LoopFlushWithContext.
 func (s *Service) LoopFlush() error {
-	sendTimeDuration := time.Duration(s.pstore.GetLoopTime())
+	return s.LoopFlushWithContext(context.Background())
+}
+
+// LoopFlushWithContext периодически сбрасывает данные на диск с поддержкой отмены через контекст.
+// Корректно завершается при отмене контекста, что позволяет реализовать graceful shutdown.
+func (s *Service) LoopFlushWithContext(ctx context.Context) error {
+	if s.pstore == nil {
+		return nil
+	}
+
+	sendTimeDuration := time.Duration(s.pstore.GetLoopTime()) * time.Second
+	ticker := time.NewTicker(sendTimeDuration)
+	defer ticker.Stop()
 
 	for {
-		if err := s.pstore.Flush(); err != nil {
-			return fmt.Errorf("flush persist storage: %w", err)
+		select {
+		case <-ctx.Done():
+			// Контекст отменён - выходим из цикла
+			return ctx.Err()
+		case <-ticker.C:
+			if err := s.pstore.Flush(); err != nil {
+				return fmt.Errorf("flush persist storage: %w", err)
+			}
 		}
-		time.Sleep(sendTimeDuration * time.Second)
 	}
 }

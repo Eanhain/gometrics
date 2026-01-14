@@ -78,7 +78,7 @@ func GzipHandleReader(next http.Handler) http.Handler {
 		// For this implementation, we just set the body to the gzip reader.
 		// Note that gzip.Reader.Close() doesn't close the underlying reader, which is good here.
 		r.Body = io.NopCloser(gz) // Wrapping gz to satisfy ReadCloser interface
-
+		r.Header.Del("Content-Encoding")
 		next.ServeHTTP(w, r)
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
@@ -27,6 +28,7 @@ import (
 	"gometrics/internal/clientconfig"
 	myCompress "gometrics/internal/compress"
 	"gometrics/internal/retry"
+	"gometrics/internal/signature"
 )
 
 // RuntimeUpdate manages the collection and transmission of runtime metrics.
@@ -40,6 +42,7 @@ type RuntimeUpdate struct {
 	// ChIn is a buffered channel used for batched metric transmission.
 	ChIn      chan []metricsdto.Metrics
 	RateLimit int
+	PubKey    *rsa.PublicKey
 }
 
 // Service defines the interface for interacting with the local metrics storage/service.
@@ -56,13 +59,14 @@ type Service interface {
 // Arguments:
 //   - service: The local service interface for storing collected metrics before sending.
 //   - RateLimit: The capacity of the internal channel for outgoing metric batches.
-func NewRuntimeUpdater(service Service, RateLimit int) *RuntimeUpdate {
+func NewRuntimeUpdater(service Service, RateLimit int, pubKey *rsa.PublicKey) *RuntimeUpdate {
 	return &RuntimeUpdate{
 		service:    service,
 		memMetrics: runtime.MemStats{},
 		client:     resty.New(),
 		ChIn:       make(chan []metricsdto.Metrics, RateLimit),
 		RateLimit:  RateLimit,
+		PubKey:     pubKey,
 	}
 }
 
@@ -188,6 +192,7 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 // SendMetricGobCh continuously reads batches of metrics from the input channel (ChIn),
 // encodes them using Gob, optionally compresses them with gzip, signs them with HMAC (if key is present),
 // and sends them to the server URL (curl).
+
 func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compress string, key string) error {
 	for metrics := range ru.ChIn {
 		var (
@@ -222,6 +227,13 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 				return err
 			}
 			req.SetHeader("HashSHA256", hex.EncodeToString(hash))
+		}
+		var empty *rsa.PublicKey
+		if ru.PubKey != empty {
+			bufOut, err = signature.EncryptByRSA(bufOut, ru.PubKey)
+			if err != nil {
+				return err
+			}
 		}
 
 		ru.mu.Lock()
