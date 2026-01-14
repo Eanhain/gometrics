@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -16,24 +17,25 @@ import (
 // Поддерживает все опции, аналогичные флагам и переменным окружения.
 type JSONConfig struct {
 	Address       string `json:"address"`        // аналог переменной окружения ADDRESS или флага -a
-	Restore       *bool  `json:"restore"`        // аналог RESTORE или -r (указатель для определения, было ли значение задано)
-	StoreInterval string `json:"store_interval"` // аналог STORE_INTERVAL или -i (строка вида "1s", "5m")
+	Restore       *bool  `json:"restore"`        // аналог RESTORE или -r
+	StoreInterval string `json:"store_interval"` // аналог STORE_INTERVAL или -i
 	StoreFile     string `json:"store_file"`     // аналог FILE_STORAGE_PATH или -f
 	DatabaseDSN   string `json:"database_dsn"`   // аналог DATABASE_DSN или -d
 	CryptoKey     string `json:"crypto_key"`     // аналог CRYPTO_KEY или -crypto-key
+	TrustedSubnet string `json:"trusted_subnet"` // аналог TRUSTED_SUBNET или -t (CIDR нотация)
 }
 
 // ServerConfigs содержит все настройки конфигурации сервера.
-// Поля помечены тегами для парсинга из переменных окружения через github.com/caarlos0/env.
 type ServerConfigs struct {
-	Addr        addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`            // адрес и порт сервера
-	StoreInter  int       `env:"STORE_INTERVAL" envDefault:"300"`                // интервал сброса метрик (сек)
-	FilePath    string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"` // путь к файлу хранения
-	Restore     bool      `env:"RESTORE" envDefault:"true"`                      // восстановление метрик при старте
-	DatabaseDSN string    `env:"DATABASE_DSN" envDefault:""`                     // строка подключения к БД
-	Key         string    `env:"KEY" envDefault:""`                              // ключ подписи (SHA256)
-	CryptoKey   string    `env:"CRYPTO_KEY" envDefault:""`                       // путь к публичному ключу
-	ConfigPath  string    `env:"CONFIG" envDefault:""`                           // путь к JSON конфигу
+	Addr          addr.Addr `env:"ADDRESS" envDefault:"localhost:8080"`
+	StoreInter    int       `env:"STORE_INTERVAL" envDefault:"300"`
+	FilePath      string    `env:"FILE_STORAGE_PATH" envDefault:"metrics_storage"`
+	Restore       bool      `env:"RESTORE" envDefault:"true"`
+	DatabaseDSN   string    `env:"DATABASE_DSN" envDefault:""`
+	Key           string    `env:"KEY" envDefault:""`
+	CryptoKey     string    `env:"CRYPTO_KEY" envDefault:""`
+	ConfigPath    string    `env:"CONFIG" envDefault:""`
+	TrustedSubnet string    `env:"TRUSTED_SUBNET" envDefault:""` // CIDR нотация доверенной подсети
 }
 
 // GetPort возвращает порт в формате ":8080"
@@ -116,17 +118,15 @@ func isFlagPassedInSet(fs *flag.FlagSet, name string) bool {
 //  4. Значения по умолчанию
 //
 // Исключение: для Key переменная окружения KEY имеет приоритет над флагом -k.
+// ParseFlags читает конфигурацию из env, JSON файла и флагов командной строки.
 func (o *ServerConfigs) ParseFlags() {
-	// Шаг 1: Парсим переменные окружения
 	if err := env.Parse(o); err != nil {
 		fmt.Println("env vars not found")
 	}
 
-	// Сохраняем значения из ENV для проверки приоритетов
 	envKey := o.Key
 	envConfigPath := o.ConfigPath
 
-	// Шаг 2: Определяем флаги командной строки
 	flag.Var(&o.Addr, "a", "Host and port for connect/create")
 	flag.IntVar(&o.StoreInter, "i", o.StoreInter, "Flush metrics interval")
 	flag.StringVar(&o.FilePath, "f", o.FilePath, "Metrics store file destination")
@@ -136,26 +136,24 @@ func (o *ServerConfigs) ParseFlags() {
 	flag.BoolVar(&o.Restore, "r", o.Restore, "Restore metrics from json file")
 	flag.StringVar(&o.ConfigPath, "config", o.ConfigPath, "Path to JSON config file")
 	flag.StringVar(&o.ConfigPath, "c", o.ConfigPath, "Path to JSON config file (shorthand)")
+	// Новый флаг для trusted subnet в CIDR нотации
+	flag.StringVar(&o.TrustedSubnet, "t", o.TrustedSubnet, "Trusted subnet in CIDR notation (e.g., 192.168.1.0/24)")
 	flag.Parse()
 
-	// Шаг 3: Определяем путь к конфигу (ENV имеет приоритет)
 	configPath := o.ConfigPath
 	if envConfigPath != "" {
 		configPath = envConfigPath
 	}
 
-	// Шаг 4: Загружаем JSON конфигурацию
 	jsonCfg, err := loadJSONConfig(configPath)
 	if err != nil {
 		fmt.Printf("Warning: %v\n", err)
 	}
 
-	// Шаг 5: Применяем значения из JSON
 	if jsonCfg != nil {
 		o.applyJSONConfig(jsonCfg)
 	}
 
-	// Шаг 6: Особая логика для Key - ENV имеет приоритет над флагом
 	if envKey != "" {
 		o.Key = envKey
 	}
@@ -184,6 +182,22 @@ func (o *ServerConfigs) applyJSONConfig(cfg *JSONConfig) {
 	if cfg.CryptoKey != "" && !isFlagPassed("crypto-key") && os.Getenv("CRYPTO_KEY") == "" {
 		o.CryptoKey = cfg.CryptoKey
 	}
+	// Применяем trusted_subnet из JSON если не задан через флаг или ENV
+	if cfg.TrustedSubnet != "" && !isFlagPassed("t") && os.Getenv("TRUSTED_SUBNET") == "" {
+		o.TrustedSubnet = cfg.TrustedSubnet
+	}
+}
+
+// GetTrustedSubnet возвращает распарсенную подсеть или nil если не задана/невалидна
+func (o *ServerConfigs) GetTrustedSubnet() *net.IPNet {
+	if o.TrustedSubnet == "" {
+		return nil
+	}
+	_, ipNet, err := net.ParseCIDR(o.TrustedSubnet)
+	if err != nil {
+		return nil
+	}
+	return ipNet
 }
 
 // applyJSONConfigFromSet применяет значения из JSON конфига для указанного FlagSet.
