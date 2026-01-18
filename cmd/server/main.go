@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	_ "net/http/pprof" // Import pprof for profiling
 	"os"
@@ -19,6 +20,7 @@ import (
 	"gometrics/configs"
 	myCompress "gometrics/internal/compress"
 	"gometrics/internal/db"
+	"gometrics/internal/grpcserver"
 	"gometrics/internal/handlers"
 	"gometrics/internal/logger"
 	"gometrics/internal/persist"
@@ -27,6 +29,7 @@ import (
 	"gometrics/internal/service"
 	"gometrics/internal/signature"
 	"gometrics/internal/storage"
+	"gometrics/internal/trustedsubnet" // Новый импорт для middleware
 	_ "gometrics/swagger"
 
 	"github.com/go-chi/chi/v5"
@@ -141,6 +144,10 @@ func main() {
 
 	newMux.Use(myCompress.GzipHandleReader) // Request decompression
 
+	if f.TrustedSubnet != "" {
+		newMux.Use(trustedsubnet.TrustedSubnetMiddleware(f.TrustedSubnet))
+	}
+
 	newMux.Mount("/swagger", httpSwagger.WrapHandler)
 
 	// Mount profiler for debugging
@@ -159,6 +166,15 @@ func main() {
 	// 10. Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+
+	if f.GRPCAddr != "" {
+		go func() {
+			log.Printf("Starting gRPC server on %s", f.GRPCAddr)
+			if err := grpcserver.Run(f.GRPCAddr, newService, f.GetTrustedSubnet()); err != nil {
+				log.Fatalf("gRPC server error: %v", err)
+			}
+		}()
+	}
 
 	// 11. Start Server and Background Tasks
 	if f.StoreInter > 0 {
