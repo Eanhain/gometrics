@@ -301,8 +301,6 @@ func (ru *RuntimeUpdate) SenderGRPC(ctx context.Context, client *grpcclient.Clie
 			} else {
 				log.Println("Metrics sent via gRPC")
 			}
-		default:
-			return
 		}
 	}
 }
