@@ -27,6 +27,7 @@ import (
 	"gometrics/internal/service"
 	"gometrics/internal/signature"
 	"gometrics/internal/storage"
+	"gometrics/internal/trustedsubnet" // Новый импорт для middleware
 	_ "gometrics/swagger"
 
 	"github.com/go-chi/chi/v5"
@@ -140,6 +141,10 @@ func main() {
 	}
 
 	newMux.Use(myCompress.GzipHandleReader) // Request decompression
+
+	if f.TrustedSubnet != "" {
+		newMux.Use(trustedsubnet.TrustedSubnetMiddleware(f.TrustedSubnet))
+	}
 
 	newMux.Mount("/swagger", httpSwagger.WrapHandler)
 

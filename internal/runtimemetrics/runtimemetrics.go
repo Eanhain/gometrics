@@ -27,6 +27,7 @@ import (
 	metricsdto "gometrics/internal/api/metricsdto"
 	"gometrics/internal/clientconfig"
 	myCompress "gometrics/internal/compress"
+	"gometrics/internal/netutil" // Новый импорт для получения локального IP
 	"gometrics/internal/retry"
 	"gometrics/internal/signature"
 )
@@ -39,10 +40,10 @@ type RuntimeUpdate struct {
 	service    Service
 	memMetrics runtime.MemStats
 	client     *resty.Client
-	// ChIn is a buffered channel used for batched metric transmission.
-	ChIn      chan []metricsdto.Metrics
-	RateLimit int
-	PubKey    *rsa.PublicKey
+	ChIn       chan []metricsdto.Metrics
+	RateLimit  int
+	PubKey     *rsa.PublicKey
+	localIP    string // Кэшированный IP-адрес хоста агента
 }
 
 // Service defines the interface for interacting with the local metrics storage/service.
@@ -60,6 +61,18 @@ type Service interface {
 //   - service: The local service interface for storing collected metrics before sending.
 //   - RateLimit: The capacity of the internal channel for outgoing metric batches.
 func NewRuntimeUpdater(service Service, RateLimit int, pubKey *rsa.PublicKey) *RuntimeUpdate {
+	// Получаем IP-адрес хоста агента при инициализации
+	localIP, err := netutil.GetOutboundIPString()
+	if err != nil {
+		log.Printf("WARNING: failed to get local IP address: %v", err)
+		// Пробуем альтернативный метод
+		localIP, err = netutil.GetLocalIP()
+		if err != nil {
+			log.Printf("WARNING: failed to get local IP via interfaces: %v", err)
+			localIP = "" // Будет пустым, сервер может отклонить запрос
+		}
+	}
+
 	return &RuntimeUpdate{
 		service:    service,
 		memMetrics: runtime.MemStats{},
@@ -67,6 +80,7 @@ func NewRuntimeUpdater(service Service, RateLimit int, pubKey *rsa.PublicKey) *R
 		ChIn:       make(chan []metricsdto.Metrics, RateLimit),
 		RateLimit:  RateLimit,
 		PubKey:     pubKey,
+		localIP:    localIP, // Сохраняем IP для использования в заголовках
 	}
 }
 
@@ -193,6 +207,9 @@ func (ru *RuntimeUpdate) GetMetrics(ctx context.Context, metrics []string, ext b
 // encodes them using Gob, optionally compresses them with gzip, signs them with HMAC (if key is present),
 // and sends them to the server URL (curl).
 
+// SendMetricGobCh continuously reads batches of metrics from the input channel,
+// encodes them using Gob, optionally compresses them with gzip, signs them with HMAC,
+// and sends them to the server URL with X-Real-IP header.
 func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compress string, key string) error {
 	for metrics := range ru.ChIn {
 		var (
@@ -201,6 +218,12 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 		)
 
 		req := ru.client.R().SetHeader("Content-Type", "application/x-gob")
+
+		// Добавляем заголовок X-Real-IP с IP-адресом хоста агента
+		if ru.localIP != "" {
+			req.SetHeader("X-Real-IP", ru.localIP)
+		}
+
 		encoder := gob.NewEncoder(&newBuffer)
 		err := encoder.Encode(metrics)
 		newBufferBytes := newBuffer.Bytes()
@@ -228,6 +251,7 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 			}
 			req.SetHeader("HashSHA256", hex.EncodeToString(hash))
 		}
+
 		var empty *rsa.PublicKey
 		if ru.PubKey != empty {
 			bufOut, err = signature.EncryptByRSA(bufOut, ru.PubKey)
@@ -238,7 +262,6 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 
 		ru.mu.Lock()
 		retryCfg := retry.DefaultConfig()
-		// Execute request with retry logic
 		_, err = retryCfg.Retry(ctx, func(_ ...any) (any, error) {
 			_, err := req.SetBody(bufOut).Post(curl)
 			return nil, err
@@ -250,6 +273,11 @@ func (ru *RuntimeUpdate) SendMetricGobCh(ctx context.Context, curl string, compr
 		}
 	}
 	return nil
+}
+
+// GetLocalIP возвращает IP-адрес хоста агента.
+func (ru *RuntimeUpdate) GetLocalIP() string {
+	return ru.localIP
 }
 
 // Sender starts the metric sending process using configuration from ClientConfig.
