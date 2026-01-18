@@ -295,7 +295,7 @@ func (ru *RuntimeUpdate) SenderGRPC(ctx context.Context, client *grpcclient.Clie
 			log.Printf("gRPC send error: %v", err)
 		} else {
 			log.Println("Metrics sent via gRPC")
-		}
+		}	}
 
 // AddGauge converts string values from metric maps into gauge metrics (metricsdto.Metrics).
 func (ru *RuntimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
