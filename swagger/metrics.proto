@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package metrics;
+
+option go_package = "gometrics/proto/metrics";
+
+// Metric представляет одну метрику
+message Metric {
+    string id = 1; // имя метрики
+    string mtype = 2; // тип: "gauge" или "counter"
+    optional double value = 3;  // значение для gauge
+    optional int64 delta = 4;   // значение для counter
+}
+
+// Запрос на обновление метрик (batch)
+message UpdateMetricsRequest {
+    repeated Metric metrics = 1;
+}
+
+// Ответ на обновление
+message UpdateMetricsResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+// Запрос на получение метрики
+message GetMetricRequest {
+    string id = 1;
+    string mtype = 2;
+}
+
+// Сервис метрик
+service MetricsService {
+    // Обновление одной метрики
+    rpc UpdateMetric(Metric) returns (Metric);
+    
+    // Batch обновление метрик
+    rpc UpdateMetrics(UpdateMetricsRequest) returns (UpdateMetricsResponse);
+    
+    // Получение метрики
+    rpc GetMetric(GetMetricRequest) returns (Metric);
+}

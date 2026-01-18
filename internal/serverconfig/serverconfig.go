@@ -36,6 +36,7 @@ type ServerConfigs struct {
 	CryptoKey     string    `env:"CRYPTO_KEY" envDefault:""`
 	ConfigPath    string    `env:"CONFIG" envDefault:""`
 	TrustedSubnet string    `env:"TRUSTED_SUBNET" envDefault:""` // CIDR нотация доверенной подсети
+	GRPCAddr      string    `env:"GRPC_ADDRESS" envDefault:""`
 }
 
 // GetPort возвращает порт в формате ":8080"
@@ -138,6 +139,7 @@ func (o *ServerConfigs) ParseFlags() {
 	flag.StringVar(&o.ConfigPath, "c", o.ConfigPath, "Path to JSON config file (shorthand)")
 	// Новый флаг для trusted subnet в CIDR нотации
 	flag.StringVar(&o.TrustedSubnet, "t", o.TrustedSubnet, "Trusted subnet in CIDR notation (e.g., 192.168.1.0/24)")
+	flag.StringVar(&o.GRPCAddr, "grpc", o.GRPCAddr, "gRPC server address (e.g., :3200)")
 	flag.Parse()
 
 	configPath := o.ConfigPath

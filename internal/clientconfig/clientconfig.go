@@ -50,6 +50,9 @@ type ClientConfig struct {
 
 	// ConfigPath is the path to JSON configuration file.
 	ConfigPath string `env:"CONFIG" envDefault:""`
+
+	GRPCAddr string `env:"GRPC_ADDRESS" envDefault:""`  // адрес gRPC сервера
+	UseGRPC  bool   `env:"USE_GRPC" envDefault:"false"` // использовать gRPC вместо
 }
 
 // GetPort returns the port string formatted with a colon (e.g., ":8080").
@@ -157,6 +160,8 @@ func (o *ClientConfig) ParseFlags() {
 		flag.StringVar(&o.Key, "k", o.Key, "Cipher key")
 		flag.StringVar(&o.CryptoKey, "crypto-key", o.CryptoKey, "Public key for payload encryption")
 		flag.StringVar(&o.ConfigPath, "config", o.ConfigPath, "Path to JSON config file")
+		flag.StringVar(&o.GRPCAddr, "grpc", o.GRPCAddr, "gRPC server address (e.g., localhost:3200)")
+		flag.BoolVar(&o.UseGRPC, "use-grpc", o.UseGRPC, "Use gRPC instead of HTTP")
 	}
 
 	// 3. Parse Flags
