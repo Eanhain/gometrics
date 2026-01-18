@@ -290,12 +290,14 @@ func (ru *RuntimeUpdate) Sender(ctx context.Context, curl string, f clientconfig
 }
 
 func (ru *RuntimeUpdate) SenderGRPC(ctx context.Context, client *grpcclient.Client) {
-	for metrics := range ru.Chin {
+	for metrics := range ru.ChIn {
 		if err := client.SendMetrics(ctx, metrics); err != nil {
 			log.Printf("gRPC send error: %v", err)
 		} else {
 			log.Println("Metrics sent via gRPC")
-		}	}
+		}
+	}
+}
 
 // AddGauge converts string values from metric maps into gauge metrics (metricsdto.Metrics).
 func (ru *RuntimeUpdate) AddGauge(keys []string, metrics map[string]string) (output []metricsdto.Metrics, err error) {
