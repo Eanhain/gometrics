@@ -27,6 +27,7 @@ import (
 	metricsdto "gometrics/internal/api/metricsdto"
 	"gometrics/internal/clientconfig"
 	myCompress "gometrics/internal/compress"
+	"gometrics/internal/grpcclient"
 	"gometrics/internal/netutil" // Новый импорт для получения локального IP
 	"gometrics/internal/retry"
 	"gometrics/internal/signature"
@@ -285,6 +286,24 @@ func (ru *RuntimeUpdate) GetLocalIP() string {
 func (ru *RuntimeUpdate) Sender(ctx context.Context, curl string, f clientconfig.ClientConfig) {
 	if err := ru.SendMetricGobCh(ctx, curl, f.Compress, f.Key); err != nil {
 		panic(fmt.Errorf("send metrics to %s:%s: %w", f.GetHost(), f.GetPort(), err))
+	}
+}
+
+func (ru *RuntimeUpdate) SenderGRPC(ctx context.Context, client *grpcclient.Client) {
+	for {
+		select {
+		case metrics, ok := <-ru.ChIn:
+			if !ok {
+				return
+			}
+			if err := client.SendMetrics(ctx, metrics); err != nil {
+				log.Printf("gRPC send error: %v", err)
+			} else {
+				log.Println("Metrics sent via gRPC")
+			}
+		default:
+			return
+		}
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"gometrics/configs"
 	"gometrics/internal/clientconfig"
+	"gometrics/internal/grpcclient"
 	"gometrics/internal/persist"
 	"gometrics/internal/retry"
 	"gometrics/internal/runtimemetrics"
@@ -25,7 +26,6 @@ import (
 
 // --- Constants ---
 
-// shutdownTimeout определяет максимальное время ожидания graceful shutdown
 const shutdownTimeout = 10 * time.Second
 
 var metrics = []string{
@@ -44,18 +44,15 @@ var extMetrics = []string{
 
 func main() {
 	fmt.Println(configs.BuildVerPrint())
-	// 1. Предварительная проверка окружения
+
 	if err := checkDependencies(); err != nil {
 		panic(err)
 	}
 
-	// 2. Инициализация конфигурации
-	// Используем ваш пакет clientconfig
 	cfg := clientconfig.InitialFlags()
 	cfg.ParseFlags()
 
 	var pubKey *rsa.PublicKey
-
 	if cfg.CryptoKey != "" {
 		var err error
 		pubKey, err = signature.GetRSAPubKey(cfg.CryptoKey)
@@ -64,7 +61,6 @@ func main() {
 		}
 	}
 
-	// 3. Инициализация контекста и сервисного слоя
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -73,46 +69,55 @@ func main() {
 		panic(err)
 	}
 
-	// 4. Подготовка каналов и генератора метрик
 	metricsGen := runtimemetrics.NewRuntimeUpdater(svc, cfg.RateLimit, pubKey)
 
-	// Каналы для сигналов от тикеров
+	// Инициализация gRPC клиента если включён
+	var grpcClient *grpcclient.Client
+	if cfg.UseGRPC && cfg.GRPCAddr != "" {
+		localIP := metricsGen.GetLocalIP()
+		grpcClient, err = grpcclient.NewClient(cfg.GRPCAddr, localIP)
+		if err != nil {
+			log.Printf("Failed to create gRPC client: %v, falling back to HTTP", err)
+		} else {
+			log.Printf("Using gRPC transport to %s", cfg.GRPCAddr)
+			defer grpcClient.Close()
+		}
+	}
+
 	pollCh1 := make(chan struct{})
 	pollCh2 := make(chan struct{})
 	reportCh := make(chan struct{})
-
-	// Канал задач для воркеров
 	jobs := make(chan func(), cfg.RateLimit)
 
 	var wg sync.WaitGroup
 
-	// Подготовка интервалов и URL
 	pollInterval := time.Duration(cfg.PollInterval) * time.Second
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second
 	targetURL := fmt.Sprintf("http://%v%v/updates/", cfg.GetHost(), cfg.GetPort())
 
-	// 5. Запуск фоновых процессов
-
-	// Тикеры (отвечают за тайминг)
 	runTickers(ctx, &wg, pollInterval, reportInterval, pollCh1, pollCh2, reportCh)
-
-	// Сборщики метрик (реагируют на тики сбора)
 	runCollectors(ctx, &wg, metricsGen, pollCh1, pollCh2, reportCh)
-
-	// Пул воркеров (обрабатывает очередь jobs)
 	runWorkerPool(ctx, &wg, cfg.RateLimit, jobs)
 
-	// Диспетчер задач (создает job для отправки по тику reportCh)
-	// Замыкание захватывает cfg и targetURL
-	senderTaskFactory := func() func() {
-		return func() {
-			metricsGen.Sender(ctx, targetURL, cfg)
+	// Выбор между gRPC и HTTP для отправки
+	var senderTaskFactory func() func()
+	if grpcClient != nil {
+		senderTaskFactory = func() func() {
+			return func() {
+				metricsGen.SenderGRPC(ctx, grpcClient)
+			}
+		}
+	} else {
+		senderTaskFactory = func() func() {
+			return func() {
+				metricsGen.Sender(ctx, targetURL, cfg)
+			}
 		}
 	}
+
 	runJobDispatcher(ctx, &wg, jobs, senderTaskFactory)
 
-	// 6. Ожидание завершения с финальной отправкой метрик
-	waitShutdown(ctx, cancel, &wg, metricsGen, targetURL, cfg)
+	waitShutdown(ctx, cancel, &wg, metricsGen, targetURL, cfg, grpcClient)
 }
 
 // --- Initialization Helpers ---
@@ -130,7 +135,6 @@ func initService(ctx context.Context) (*service.Service, error) {
 		log.Printf("agent retry attempt %d failed: %v; next retry in %v", attempt, err, delay)
 	}
 
-	// Инициализация "заглушки" персистентности (как в исходном коде)
 	persistResult, err := retryCfg.Retry(ctx, func(args ...any) (any, error) {
 		path := args[0].(string)
 		interval := args[1].(int)
@@ -147,7 +151,6 @@ func initService(ctx context.Context) (*service.Service, error) {
 
 // --- Concurrency Helpers ---
 
-// runTickers запускает таймеры и распределяет сигналы по каналам
 func runTickers(
 	ctx context.Context,
 	wg *sync.WaitGroup,
@@ -157,7 +160,6 @@ func runTickers(
 	tickerPoll := time.NewTicker(pollInterval)
 	tickerReport := time.NewTicker(reportInterval)
 
-	// Fan-out для Poll тикера (раздает сигнал в два канала)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -180,7 +182,6 @@ func runTickers(
 		}
 	}()
 
-	// Fan-out для Report тикера
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -199,14 +200,12 @@ func runTickers(
 	}()
 }
 
-// runCollectors слушает каналы сигналов и запускает сбор метрик
 func runCollectors(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	metricsGen *runtimemetrics.RuntimeUpdate,
 	inExt, inStd, inBatch <-chan struct{},
 ) {
-	// Worker 1: Сбор расширенных метрик (gopsutil)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -222,7 +221,6 @@ func runCollectors(
 		log.Println("Graceful shutdown common metric sender")
 	}()
 
-	// Worker 2: Сбор стандартных метрик Go
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -238,7 +236,6 @@ func runCollectors(
 		log.Println("Graceful shutdown ext metric sender")
 	}()
 
-	// Worker 3: Генерация батчей для отправки
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -256,7 +253,6 @@ func runCollectors(
 	}()
 }
 
-// runWorkerPool запускает фиксированное количество воркеров
 func runWorkerPool(ctx context.Context, wg *sync.WaitGroup, limit int, jobs <-chan func()) {
 	wg.Add(1)
 	go func() {
@@ -290,7 +286,6 @@ func workerPayload(ctx context.Context, id int, jobs <-chan func()) {
 	}
 }
 
-// runJobDispatcher создает задачи на отправку и кладет их в канал jobs
 func runJobDispatcher(
 	ctx context.Context,
 	wg *sync.WaitGroup,
@@ -307,16 +302,12 @@ func runJobDispatcher(
 			case <-ctx.Done():
 				log.Println("jobs sender closed")
 				return
-			// Создаем задачу и пытаемся положить в канал
 			case jobs <- taskFactory():
-				// Задача успешно добавлена в очередь
 			}
 		}
 	}()
 }
 
-// waitShutdown ожидает сигнал завершения и выполняет graceful shutdown.
-// Перед завершением отправляет все накопленные метрики на сервер.
 func waitShutdown(
 	ctx context.Context,
 	cancel context.CancelFunc,
@@ -324,6 +315,7 @@ func waitShutdown(
 	metricsGen *runtimemetrics.RuntimeUpdate,
 	targetURL string,
 	cfg clientconfig.ClientConfig,
+	grpcClient *grpcclient.Client,
 ) {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -331,14 +323,11 @@ func waitShutdown(
 	sig := <-stop
 	log.Printf("Received signal %v, initiating graceful shutdown...", sig)
 
-	// Отменяем контекст, это сигнал всем горутинам на выход
 	cancel()
 
-	// Создаём контекст с таймаутом для graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
-	// Ожидаем завершения всех горутин с таймаутом
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -352,9 +341,8 @@ func waitShutdown(
 		log.Println("Shutdown timeout exceeded, forcing exit")
 	}
 
-	// Финальная отправка накопленных метрик на сервер
 	log.Println("Sending remaining metrics to server...")
-	if err := sendFinalMetrics(shutdownCtx, metricsGen, targetURL, cfg); err != nil {
+	if err := sendFinalMetrics(shutdownCtx, metricsGen, targetURL, cfg, grpcClient); err != nil {
 		log.Printf("Failed to send final metrics: %v", err)
 	} else {
 		log.Println("Final metrics sent successfully")
@@ -363,15 +351,13 @@ func waitShutdown(
 	log.Println("Agent stopped")
 }
 
-// sendFinalMetrics отправляет все накопленные метрики перед завершением агента.
-// Собирает текущие метрики и отправляет их на сервер.
 func sendFinalMetrics(
 	ctx context.Context,
 	metricsGen *runtimemetrics.RuntimeUpdate,
 	targetURL string,
 	cfg clientconfig.ClientConfig,
+	grpcClient *grpcclient.Client,
 ) error {
-	// Собираем финальные метрики
 	if err := metricsGen.GetMetrics(ctx, metrics, false); err != nil {
 		log.Printf("Warning: failed to collect final std metrics: %v", err)
 	}
@@ -380,13 +366,15 @@ func sendFinalMetrics(
 		log.Printf("Warning: failed to collect final ext metrics: %v", err)
 	}
 
-	// Генерируем финальный батч
 	if err := metricsGen.GetMetricsBatch(ctx); err != nil {
 		log.Printf("Warning: failed to generate final batch: %v", err)
 	}
 
-	// Отправляем все накопленные метрики
-	metricsGen.Sender(ctx, targetURL, cfg)
+	if grpcClient != nil {
+		metricsGen.SenderGRPC(ctx, grpcClient)
+	} else {
+		metricsGen.Sender(ctx, targetURL, cfg)
+	}
 
 	return nil
 }
